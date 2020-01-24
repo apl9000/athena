@@ -1,0 +1,4 @@
+node_modules
+/package/dist
+/mathematicajs.d.ts
+/mathematicajs.min.js
