@@ -1,1 +1,5 @@
-console.log('Hello MathematicaJS!');
+import * as Geometry from './geometry';
+
+exports = {
+	Geometry
+};
