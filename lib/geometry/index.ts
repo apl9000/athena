@@ -54,6 +54,7 @@ export const square = ({ length, area, perimeter }: SquareArgs): Square => {
 		assert(area > 0, INVALID_ARGUMENT_ERROR);
 		length = Math.sqrt(area);
 	}
+
 	if (perimeter) {
 		assert(area > 0, INVALID_ARGUMENT_ERROR);
 		length = perimeter / 4;
