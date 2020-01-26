@@ -1,6 +1,9 @@
 import * as assert from 'assert';
 import { SAME_LENGTH_ERROR, INVALID_ARGUMENT_ERROR } from '../errors/index';
-import { Vector, Matrix } from './types';
+
+// TYPES
+export type Vector = number[];
+export type Matrix = Vector[];
 
 // Vector Operations
 export const vectorAddition = (v: Vector, w: Vector): Vector => {

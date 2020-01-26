@@ -1,8 +1,15 @@
 import * as assert from 'assert';
 import { INVALID_ARGUMENT_ERROR, MIN_ARGUMENT_ERROR } from '../errors/index';
-import { Circle, CircleArgs, Square, SquareArgs } from './types';
 
 // CIRCLE
+export type Circle = {
+	radius: number;
+	area: number;
+	circumference: number;
+};
+
+export type CircleArgs = Partial<Circle>;
+
 export const circleArea = (r: number): number => {
 	assert(r <= 0, INVALID_ARGUMENT_ERROR);
 	return Math.PI * Math.pow(r, 2);
@@ -37,6 +44,14 @@ export const circle = ({ radius, circumference, area }: CircleArgs): Circle => {
 };
 
 // SQUARE
+export type Square = {
+	length: number;
+	area: number;
+	perimeter;
+};
+
+export type SquareArgs = Partial<Square>;
+
 export const squareArea = (l: number): number => {
 	assert(l > 0, INVALID_ARGUMENT_ERROR);
 	return Math.pow(l, 2);
@@ -67,5 +82,38 @@ export const square = ({ length, area, perimeter }: SquareArgs): Square => {
 		length,
 		area,
 		perimeter
+	};
+};
+
+// RECTANGLE
+export type Rectangle = {
+	length: number;
+	width: number;
+	area: number;
+	perimeter: number;
+};
+
+export type RectangleArgs = {
+	length: number;
+	width: number;
+};
+
+export const rectanglePerimeter = (l: number, w: number): number => {
+	assert(l <= 0 && w <= 0, INVALID_ARGUMENT_ERROR);
+	return 2 * (w + l);
+};
+
+export const rectangleArea = (l: number, w: number) => {
+	assert(l <= 0 && w <= 0, INVALID_ARGUMENT_ERROR);
+	return w * l;
+};
+
+export const rectangle = ({ length, width }: RectangleArgs): Rectangle => {
+	assert(length <= 0 && width <= 0, INVALID_ARGUMENT_ERROR);
+	return {
+		length,
+		width,
+		area: rectangleArea(length, width),
+		perimeter: rectanglePerimeter(length, width)
 	};
 };

@@ -9,7 +9,8 @@ describe('LinearAlgebra', () => {
 				8,
 				10
 			]);
-		});
+    });
+    
 		test('should throw if vectors are not the same length', () => {
 			expect(LinearAlgebra.vectorAddition([1, 2], [5, 4, 6])).toThrowError(
 				SAME_LENGTH_ERROR

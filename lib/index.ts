@@ -1,7 +1,5 @@
 import * as Geometry from './geometry';
 import * as LinearAlgebra from './linear_algebra';
+import * as Statistics from './statistics';
 
-exports = {
-	Geometry,
-	LinearAlgebra
-};
+export { Geometry, LinearAlgebra, Statistics };

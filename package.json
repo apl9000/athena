@@ -5,10 +5,10 @@
 	"main": "mathematicajs.min.js",
 	"types": "mathematicajs.d.ts",
 	"scripts": {
-		"build:clear": "rimraf  package/dist/*",
+		"build:clean": "rimraf  package/dist/*",
 		"build:compile": "tsc",
 		"build:bundle": "node package/rollup",
-		"build": "run-s build:clear build:compile build:bundle",
+		"build": "run-s build:clean build:compile build:bundle",
 		"watch": "tsc --watch",
 		"test": "jest"
 	},
