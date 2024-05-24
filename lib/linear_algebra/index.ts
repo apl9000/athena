@@ -1,5 +1,5 @@
-import * as assert from 'assert';
-import { SAME_LENGTH_ERROR, INVALID_ARGUMENT_ERROR } from '../errors/index';
+import { assert } from "@std/assert/assert";
+import { SAME_LENGTH_ERROR, INVALID_ARGUMENT_ERROR } from '../errors/index.ts';
 
 // TYPES
 export type Vector = number[];
@@ -8,22 +8,22 @@ export type Matrix = Vector[];
 // Vector Operations
 export const vectorAddition = (v: Vector, w: Vector): Vector => {
 	// Adds corresponding elements
-	assert(v.length === w.length, SAME_LENGTH_ERROR);
+	assert(v.length === w.length, SAME_LENGTH_ERROR.message);
 	return v.map((vi, index) => vi + w[index]);
 };
 
 export const vectorSubtraction = (v: Vector, w: Vector): Vector => {
 	// Subtracts corresponding elements
-	assert(v.length === w.length, SAME_LENGTH_ERROR);
+	assert(v.length === w.length, SAME_LENGTH_ERROR.message);
 	return v.map((vi, index) => vi - w[index]);
 };
 
 export const vectorSum = (vectors: Vector[]): Vector => {
 	// Sums all corresponding elements
-	assert(vectors.length, INVALID_ARGUMENT_ERROR);
+	assert(vectors.length, INVALID_ARGUMENT_ERROR.message);
 	const vectorLength = vectors[0].length;
 	return vectors.reduce((acc, vector) => {
-		assert(vectorLength === vector.length, SAME_LENGTH_ERROR);
+		assert(vectorLength === vector.length, SAME_LENGTH_ERROR.message);
 		return vectorAddition(acc, vector);
 	}, new Array(vectorLength).fill(0) as Vector);
 };
@@ -35,13 +35,13 @@ export const scalarMultiply = (c: number, v: Vector): Vector => {
 
 export const vectorMean = (vectors: Vector[]): Vector => {
 	// Returns the element-wise average
-	assert(vectors.length, INVALID_ARGUMENT_ERROR);
+	assert(vectors.length, INVALID_ARGUMENT_ERROR.message);
 	return scalarMultiply(1 / vectors.length, vectorSum(vectors));
 };
 
 export const dotProduct = (v: Vector, w: Vector): number => {
 	// Returns v_1 * w_1 + ... + v_n * v_n
-	assert(v.length === w.length, SAME_LENGTH_ERROR);
+	assert(v.length === w.length, SAME_LENGTH_ERROR.message);
 	return v.reduce((acc, vi, i) => (acc += vi * w[i]), 0);
 };
 
