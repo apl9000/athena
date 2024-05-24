@@ -1,3 +1,3 @@
-# 🚧 mathematicajs 🚧 (WORK IN PROGRESS)
+# 🚧 Athena 🚧 (WORK IN PROGRESS)
 
-👩‍🔬 Javascript for math, science and other stuff! 👨‍🔬
+👩‍🔬 Athena is a collection of function for math, science and other stuff inspired by the goddess of mathematics herself. 👨‍🔬
