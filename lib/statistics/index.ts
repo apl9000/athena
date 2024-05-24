@@ -2,11 +2,8 @@ import { assert } from "@std/assert/assert";
 import { INVALID_ARGUMENT_ERROR, SAME_LENGTH_ERROR } from "../errors/index.ts";
 import { dotProduct, sumOfSquares } from "../linear_algebra/index.ts";
 
-export const mean = (xs: number[]): number => {
-  // returns the mean
-  assert(xs.length > 0, INVALID_ARGUMENT_ERROR.message);
-  return xs.reduce((acc, value) => (acc += value), 0) / xs.length;
-};
+
+export { mean } from "./mean.ts";
 
 const _medianOdd = (xs: number[]): number => {
   // If len(xs) is odd, the median function is the middle element
