@@ -1,3 +1,6 @@
 {
+  "name": "@apl/athena",
+  "version": "0.1.0",
+  "exports": "./lib/index.ts",
   "imports": { "@std/assert": "jsr:@std/assert@^0.225.3" }
 }

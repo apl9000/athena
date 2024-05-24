@@ -2,18 +2,18 @@ import { assert } from "@std/assert/assert";
 import { INVALID_ARGUMENT_ERROR, SAME_LENGTH_ERROR } from "../errors/index.ts";
 import { dotProduct, sumOfSquares } from "../linear_algebra/index.ts";
 
-
-export { mean } from "./mean.ts";
+import { mean } from "./mean.ts";
+export { mean };
 
 const _medianOdd = (xs: number[]): number => {
   // If len(xs) is odd, the median function is the middle element
-  assert(xs.length > 0, INVALID_ARGUMENT_ERROR.message);
+  assert(xs.length > 0, INVALID_ARGUMENT_ERROR);
   return xs.sort((a, b) => a - b)[Math.trunc(xs.length / 2)];
 };
 
 const _medianEven = (xs: number[]): number => {
   // If len(xs) is even, it's the average of the middle two elements
-  assert(xs.length > 0, INVALID_ARGUMENT_ERROR.message);
+  assert(xs.length > 0, INVALID_ARGUMENT_ERROR);
   const sorted = xs.sort((a, b) => a - b);
   const mid = Math.trunc(xs.length / 2);
   return (sorted[mid - 1] + sorted[mid]) / 2;
@@ -21,14 +21,14 @@ const _medianEven = (xs: number[]): number => {
 
 export const median = (v: number[]): number => {
   // Finds the middle-most value of v
-  assert(v.length > 0, INVALID_ARGUMENT_ERROR.message);
+  assert(v.length > 0, INVALID_ARGUMENT_ERROR);
   return v.length % 2 === 0 ? _medianEven(v) : _medianOdd(v);
 };
 
 export const quartile = (xs: number[], p: number): number => {
   // Returns the pth-percentile value of xs
-  assert(xs.length > 0, INVALID_ARGUMENT_ERROR.message);
-  assert(p > 0 && p <= 1, INVALID_ARGUMENT_ERROR.message);
+  assert(xs.length > 0, INVALID_ARGUMENT_ERROR);
+  assert(p > 0 && p <= 1, INVALID_ARGUMENT_ERROR);
   return xs.sort((a, b) => a - b)[p * xs.length];
 };
 
@@ -54,7 +54,7 @@ const _findMin = (xs: number[]): number => {
 
 export const mode = (xs: number[]): number[] => {
   // Returns a list of the most common value(s)
-  assert(xs.length > 0, INVALID_ARGUMENT_ERROR.message);
+  assert(xs.length > 0, INVALID_ARGUMENT_ERROR);
   const counted = xs.reduce((acc, value) => {
     !acc[value] ? (acc[value] = 1) : (acc[value] += 1);
     return acc;
@@ -68,24 +68,24 @@ export const mode = (xs: number[]): number[] => {
 };
 
 export const dataRange = (xs: number[]): number => {
-  assert(xs.length > 0, INVALID_ARGUMENT_ERROR.message);
+  assert(xs.length > 0, INVALID_ARGUMENT_ERROR);
   return _findMax(xs) - _findMin(xs);
 };
 
 export const deviationMean = (xs: number[]): number[] => {
   //Translate xs by subtracting its mean (so the result has mean 0)
-  assert(xs.length > 0, INVALID_ARGUMENT_ERROR.message);
+  assert(xs.length > 0, INVALID_ARGUMENT_ERROR);
   const xBar = mean(xs);
   return xs.map((x) => x - xBar);
 };
 
 export const variance = (xs: number[]): number => {
-  assert(xs.length >= 2, INVALID_ARGUMENT_ERROR.message);
+  assert(xs.length >= 2, INVALID_ARGUMENT_ERROR);
   return sumOfSquares(deviationMean(xs)) / (xs.length - 1);
 };
 
 export const standardDeviation = (xs: number[]): number => {
-  assert(xs.length >= 2, INVALID_ARGUMENT_ERROR.message);
+  assert(xs.length >= 2, INVALID_ARGUMENT_ERROR);
   return Math.sqrt(variance(xs));
 };
 
@@ -96,7 +96,7 @@ export const interQuartileRange = (xs: number[]): number => {
 
 export const covariance = (xs: number[], ys: number[]): number => {
   // Covariance measures how 2 variables vary in tandem from their means
-  assert(xs.length === ys.length, SAME_LENGTH_ERROR.message);
+  assert(xs.length === ys.length, SAME_LENGTH_ERROR);
   return dotProduct(deviationMean(xs), deviationMean(ys)) / (xs.length - 1);
 };
 

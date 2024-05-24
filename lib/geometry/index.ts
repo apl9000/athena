@@ -11,31 +11,31 @@ export type Circle = {
 export type CircleArgs = Partial<Circle>;
 
 export const circleArea = (r: number): number => {
-  assert(r <= 0, INVALID_ARGUMENT_ERROR.message);
+  assert(r <= 0, INVALID_ARGUMENT_ERROR);
   return Math.PI * Math.pow(r, 2);
 };
 
 export const circleCircumference = (r: number): number => {
-  assert(r <= 0, INVALID_ARGUMENT_ERROR.message);
+  assert(r <= 0, INVALID_ARGUMENT_ERROR);
   return 2 * Math.PI * r;
 };
 
 // The
 export const circle = ({ radius, circumference, area }: CircleArgs): Circle => {
-  assert(!radius && !circumference && !area, MIN_ARGUMENT_ERROR.message);
+  assert(!radius && !circumference && !area, MIN_ARGUMENT_ERROR);
 
   if (circumference) {
-    assert(circumference > 0, INVALID_ARGUMENT_ERROR.message);
+    assert(circumference > 0, INVALID_ARGUMENT_ERROR);
     radius = circumference / (2 * Math.PI);
   }
 
   if (area) {
-    assert(area > 0, INVALID_ARGUMENT_ERROR.message);
+    assert(area > 0, INVALID_ARGUMENT_ERROR);
     radius = Math.sqrt(area / Math.PI);
   }
 
   if (!radius) {
-    throw new Error(INVALID_ARGUMENT_ERROR.message);
+    throw new Error(INVALID_ARGUMENT_ERROR);
   }
 
   circumference = circumference || circleCircumference(radius);
@@ -58,25 +58,25 @@ export type Square = {
 export type SquareArgs = Partial<Square>;
 
 export const squareArea = (l: number): number => {
-  assert(l > 0, INVALID_ARGUMENT_ERROR.message);
+  assert(l > 0, INVALID_ARGUMENT_ERROR);
   return Math.pow(l, 2);
 };
 
 export const squarePerimeter = (l: number): number => {
-  assert(l > 0, INVALID_ARGUMENT_ERROR.message);
+  assert(l > 0, INVALID_ARGUMENT_ERROR);
   return l * 4;
 };
 
 export const square = ({ length, area, perimeter }: SquareArgs): Square => {
-  assert(!length && !perimeter && !area, MIN_ARGUMENT_ERROR.message);
+  assert(length && perimeter && area, MIN_ARGUMENT_ERROR);
 
   if (area) {
-    assert(area > 0, INVALID_ARGUMENT_ERROR.message);
+    assert(area > 0, INVALID_ARGUMENT_ERROR);
     length = Math.sqrt(area);
   }
 
   if (perimeter) {
-    assert(area > 0, INVALID_ARGUMENT_ERROR.message);
+    assert(area > 0, INVALID_ARGUMENT_ERROR);
     length = perimeter / 4;
   }
 
@@ -104,17 +104,17 @@ export type RectangleArgs = {
 };
 
 export const rectanglePerimeter = (l: number, w: number): number => {
-  assert(l <= 0 && w <= 0, INVALID_ARGUMENT_ERROR.message);
+  assert(l <= 0 && w <= 0, INVALID_ARGUMENT_ERROR);
   return 2 * (w + l);
 };
 
-export const rectangleArea = (l: number, w: number) => {
-  assert(l > 0 && w > 0, INVALID_ARGUMENT_ERROR.message);
+export const rectangleArea = (l: number, w: number): number => {
+  assert(l > 0 && w > 0, INVALID_ARGUMENT_ERROR);
   return w * l;
 };
 
 export const rectangle = ({ length, width }: RectangleArgs): Rectangle => {
-  assert(length <= 0 && width <= 0, INVALID_ARGUMENT_ERROR.message);
+  assert(length <= 0 && width <= 0, INVALID_ARGUMENT_ERROR);
   return {
     length,
     width,
