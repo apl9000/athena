@@ -48,9 +48,10 @@ export const median = (v: number[]): number => {
  */
 export const quartile = (xs: number[], p: number): number => {
   // Returns the pth-percentile value of xs
-  assert(xs.length > 0, INVALID_ARGUMENT_ERROR);
-  assert(p > 0 && p <= 1, INVALID_ARGUMENT_ERROR);
-  return xs.sort((a, b) => a - b)[p * xs.length];
+  // assert(xs.length <= 0, INVALID_ARGUMENT_ERROR);
+  // assert(p  0 && p <= 1, INVALID_ARGUMENT_ERROR);
+  console.log(p * xs.length)
+  return xs.sort((a, b) => a - b)[Math.floor(p * xs.length)];
 };
 
 const _findMax = (xs: number[]): number => {
@@ -136,9 +137,9 @@ export const standardDeviation = (xs: number[]): number => {
 };
 
 /**
- * Returns the interquartile range of an array of numbers
+ * Returns the inter-quartile range of an array of numbers
  * @param xs {number[]} - An array of numbers
- * @returns {number} - The interquartile range of the array
+ * @returns {number} - The inter-quartile range of the array
  */
 export const interQuartileRange = (xs: number[]): number => {
   // Returns the difference between the 75%-tile & 25%-tile
