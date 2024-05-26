@@ -31,7 +31,7 @@ const _medianEven = (xs: number[]): number => {
 
 /**
  * Returns the median of an array of numbers.
- * @param v {number[]} - An array of numbers 
+ * @param v {number[]} - An array of numbers
  * @returns {number} - The median of the array
  */
 export const median = (v: number[]): number => {
