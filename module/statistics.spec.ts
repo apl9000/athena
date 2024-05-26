@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { mean } from "./mean.ts";
+import { mean } from "./statistics.ts";
 
 Deno.test(mean.name, async (t) => {
   await t.step("should return the mean of an array of numbers", () => {

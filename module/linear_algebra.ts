@@ -1,5 +1,5 @@
 import { assert } from "@std/assert/assert";
-import { INVALID_ARGUMENT_ERROR, SAME_LENGTH_ERROR } from "../errors/index.ts";
+import { INVALID_ARGUMENT_ERROR, SAME_LENGTH_ERROR } from "./errors.ts";
 
 // TYPES
 export type Vector = number[];

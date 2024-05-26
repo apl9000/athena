@@ -1,5 +1,5 @@
 import { assert } from "@std/assert/assert";
-import { INVALID_ARGUMENT_ERROR, MIN_ARGUMENT_ERROR } from "../errors/index.ts";
+import { INVALID_ARGUMENT_ERROR, MIN_ARGUMENT_ERROR } from "./errors.ts";
 
 // CIRCLE
 export type Circle = {
