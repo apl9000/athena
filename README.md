@@ -2,7 +2,8 @@
 
 Athena is a small math toolkit for statistics, geometry, and linear algebra.
 
-> 🚧 Athena is a passion project and work in progress. Contributions welcome—open an issue or PR!
+> 🚧 Athena is a passion project and work in progress. Contributions
+> welcome—open an issue or PR!
 
 ## Install
 
@@ -13,18 +14,18 @@ deno add jsr:@apl/athena
 ## Usage
 
 ```ts
-import {geometry, linearAlgebra, statistics} from 'jsr:@apl/athena';
+import { geometry, linearAlgebra, statistics } from "jsr:@apl/athena";
 
 const avg = statistics.mean([1, 2, 3]);
-const circle = geometry.circle({radius: 2});
+const circle = geometry.circle({ radius: 2 });
 const distance = linearAlgebra.distance([0, 0], [3, 4]);
 ```
 
 Or import subpaths for smaller bundles:
 
 ```ts
-import {mean} from 'jsr:@apl/athena/statistics';
-import {circleArea} from 'jsr:@apl/athena/geometry';
+import { mean } from "jsr:@apl/athena/statistics";
+import { circleArea } from "jsr:@apl/athena/geometry";
 ```
 
 ## API highlights
