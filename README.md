@@ -11,25 +11,27 @@ deno add jsr:@apl/athena
 ## Usage
 
 ```ts
-import {statistics, geometry, linearAlgebra} from 'jsr:@apl/athena';
+import { geometry, linearAlgebra, statistics } from "jsr:@apl/athena";
 
 const avg = statistics.mean([1, 2, 3]);
-const circle = geometry.circle({radius: 2});
+const circle = geometry.circle({ radius: 2 });
 const distance = linearAlgebra.distance([0, 0], [3, 4]);
 ```
 
 Or import subpaths for smaller bundles:
 
 ```ts
-import {mean} from 'jsr:@apl/athena/statistics';
-import {circleArea} from 'jsr:@apl/athena/geometry';
+import { mean } from "jsr:@apl/athena/statistics";
+import { circleArea } from "jsr:@apl/athena/geometry";
 ```
 
 ## API highlights
 
-- `statistics`: `mean`, `median`, `variance`, `standardDeviation`, `correlation`, `mode`, `range`
+- `statistics`: `mean`, `median`, `variance`, `standardDeviation`,
+  `correlation`, `mode`, `range`
 - `geometry`: `circle`, `square`, `rectangle` helpers with derived properties
-- `linear_algebra`: `vectorAddition`, `dotProduct`, `distance`, `matrix`, `identityMatrix`
+- `linear_algebra`: `vectorAddition`, `dotProduct`, `distance`, `matrix`,
+  `identityMatrix`
 
 ## Tasks
 

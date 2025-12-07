@@ -93,8 +93,9 @@ export const matrix = (
   fn: (i: number, j: number) => number,
 ): Matrix => {
   assert(rows > 0 && columns > 0, INVALID_ARGUMENT_ERROR);
-  return Array.from({ length: rows }, (_row, i) =>
-    Array.from({ length: columns }, (_col, j) => fn(i, j))
+  return Array.from(
+    { length: rows },
+    (_row, i) => Array.from({ length: columns }, (_col, j) => fn(i, j)),
   );
 };
 

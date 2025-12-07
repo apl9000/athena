@@ -32,7 +32,11 @@ Deno.test(variance.name, () => {
 });
 
 Deno.test(standardDeviation.name, () => {
-  assertAlmostEquals(standardDeviation([1, 2, 3, 4]), Math.sqrt(1.6666666667), 1e-9);
+  assertAlmostEquals(
+    standardDeviation([1, 2, 3, 4]),
+    Math.sqrt(1.6666666667),
+    1e-9,
+  );
 });
 
 Deno.test(correlation.name, () => {

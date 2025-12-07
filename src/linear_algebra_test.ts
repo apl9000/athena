@@ -1,4 +1,4 @@
-import { assertEquals, assertAlmostEquals } from "@std/assert";
+import { assertAlmostEquals, assertEquals } from "@std/assert";
 import {
   distance,
   dotProduct,

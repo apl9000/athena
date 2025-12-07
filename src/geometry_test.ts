@@ -1,10 +1,5 @@
 import { assertAlmostEquals, assertEquals, assertThrows } from "@std/assert";
-import {
-  circle,
-  circleArea,
-  rectangle,
-  square,
-} from "./geometry.ts";
+import { circle, circleArea, rectangle, square } from "./geometry.ts";
 
 Deno.test("circleArea uses radius", () => {
   assertAlmostEquals(circleArea(2), Math.PI * 4);
