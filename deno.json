@@ -5,11 +5,11 @@
   "version": "0.1.1",
   "exports": {
     ".": "./mod.ts",
-    "./statistics": "./module/statistics.ts",
-    "./linear_algebra": "./module/linear_algebra.ts",
-    "./geometry": "./module/geometry.ts",
-    "./probability": "./module/probability.ts",
-    "./errors": "./module/errors.ts"
+    "./statistics": "./src/statistics.ts",
+    "./linear_algebra": "./src/linear_algebra.ts",
+    "./geometry": "./src/geometry.ts",
+    "./probability": "./src/probability.ts",
+    "./errors": "./src/errors.ts"
   },
   "imports": {
     "@std/assert": "jsr:@std/assert@^0.225.3"
