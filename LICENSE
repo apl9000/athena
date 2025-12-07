@@ -2,8 +2,6 @@
 
 Version 1.0
 
-<!-- Copyright © 2025, Rives Cloud Solutions Inc. -->
-
 Permission is granted, free of charge, to any person obtaining a copy of this
 software and its accompanying materials (the “Software”), to use, copy, modify,
 merge, publish, distribute, and sublicense the Software, and to create
@@ -11,12 +9,14 @@ derivative works based on it, subject to the following conditions:
 
 1. Attribution Requirement
 
-   Redistributions of the Software must acknowledge Rives Cloud Solutions Inc. as an original author, but may omit the full license text.
+   Redistributions of the Software must acknowledge Rives Cloud Solutions Inc. as an original author,
+   but may omit the full license text.
 
 2. No Competitive SaaS Offering
 
    Neither the Software nor any modified or derivative version may be used to provide a hosted, managed, cloud-based, or
-   Software-as-a-Service (SaaS) offering whose primary commercial value is the functionality of the Software itself. This restriction applies to all licensees and downstream recipients.
+   Software-as-a-Service (SaaS) offering whose primary commercial value is the functionality of the Software itself. 
+   This restriction applies to all licensees and downstream recipients.
 
 THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT ANY WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING WITHOUT LIMITATION WARRANTIES OF MERCHANTABILITY, FITNESS FOR
