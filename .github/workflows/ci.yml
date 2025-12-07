@@ -29,3 +29,13 @@ jobs:
 
       - name: Test
         run: deno task test
+
+      - name: Coverage
+        run: deno task coverage
+
+      - name: Upload coverage artifact (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: coverage/lcov.info
