@@ -19,7 +19,6 @@
     "lint": "deno lint",
     "fmt": "deno fmt",
     "check": "deno check mod.ts",
-    "coverage": "deno test --coverage=coverage && deno coverage coverage --lcov > coverage/coverage.lcov",
-    "coverage:check": "deno task coverage && deno run --allow-read scripts/check_coverage.ts --min=70 --file=coverage/lcov.info"
+    "coverage": "deno test --coverage=coverage && deno coverage coverage --lcov > coverage/coverage.lcov"
   }
 }

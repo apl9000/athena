@@ -1,5 +1,4 @@
-import { assert } from "@std/assert/assert";
-import { INVALID_ARGUMENT_ERROR, SAME_LENGTH_ERROR } from "./errors.ts";
+import { commonErrors, trueOrThrow } from "./errors.ts";
 
 /** A one-dimensional array of numbers. */
 export type Vector = number[];
@@ -9,22 +8,22 @@ export type Matrix = Vector[];
 
 /** Adds two vectors element-wise. */
 export const vectorAddition = (v: Vector, w: Vector): Vector => {
-  assert(v.length === w.length, SAME_LENGTH_ERROR);
+  trueOrThrow(v.length === w.length, commonErrors.SAME_LENGTH_ERROR);
   return v.map((vi, index) => vi + w[index]);
 };
 
 /** Subtracts two vectors element-wise. */
 export const vectorSubtraction = (v: Vector, w: Vector): Vector => {
-  assert(v.length === w.length, SAME_LENGTH_ERROR);
+  trueOrThrow(v.length === w.length, commonErrors.SAME_LENGTH_ERROR);
   return v.map((vi, index) => vi - w[index]);
 };
 
 /** Sums a list of vectors element-wise. */
 export const vectorSum = (vectors: Vector[]): Vector => {
-  assert(vectors.length, INVALID_ARGUMENT_ERROR);
+  trueOrThrow(vectors.length > 0, commonErrors.MIN_ARGUMENT_ERROR);
   const vectorLength = vectors[0].length;
   return vectors.reduce((acc, vector) => {
-    assert(vectorLength === vector.length, SAME_LENGTH_ERROR);
+    trueOrThrow(vectorLength === vector.length, commonErrors.SAME_LENGTH_ERROR);
     return vectorAddition(acc, vector);
   }, new Array(vectorLength).fill(0) as Vector);
 };
@@ -36,13 +35,13 @@ export const scalarMultiply = (c: number, v: Vector): Vector => {
 
 /** Returns the element-wise mean of a list of vectors. */
 export const vectorMean = (vectors: Vector[]): Vector => {
-  assert(vectors.length, INVALID_ARGUMENT_ERROR);
+  trueOrThrow(vectors.length > 0, commonErrors.MIN_ARGUMENT_ERROR);
   return scalarMultiply(1 / vectors.length, vectorSum(vectors));
 };
 
 /** Computes the dot product of two vectors. */
 export const dotProduct = (v: Vector, w: Vector): number => {
-  assert(v.length === w.length, SAME_LENGTH_ERROR);
+  trueOrThrow(v.length === w.length, commonErrors.SAME_LENGTH_ERROR);
   return v.reduce((acc, vi, i) => (acc += vi * w[i]), 0);
 };
 
@@ -92,7 +91,7 @@ export const matrix = (
   columns: number,
   fn: (i: number, j: number) => number,
 ): Matrix => {
-  assert(rows > 0 && columns > 0, INVALID_ARGUMENT_ERROR);
+  trueOrThrow(rows > 0 && columns > 0, commonErrors.INVALID_ARGUMENT_ERROR);
   return Array.from(
     { length: rows },
     (_row, i) => Array.from({ length: columns }, (_col, j) => fn(i, j)),
@@ -101,6 +100,6 @@ export const matrix = (
 
 /** Creates an n x n identity matrix. */
 export const identityMatrix = (n: number): Matrix => {
-  assert(n > 0, INVALID_ARGUMENT_ERROR);
+  trueOrThrow(n > 0, commonErrors.INVALID_ARGUMENT_ERROR);
   return matrix(n, n, (i, j) => (i === j ? 1 : 0));
 };
