@@ -11,18 +11,18 @@ export type Circle = {
 export type CircleArgs = Partial<Circle>;
 
 export const circleArea = (r: number): number => {
-  assert(r <= 0, INVALID_ARGUMENT_ERROR);
+  assert(r > 0, INVALID_ARGUMENT_ERROR);
   return Math.PI * Math.pow(r, 2);
 };
 
 export const circleCircumference = (r: number): number => {
-  assert(r <= 0, INVALID_ARGUMENT_ERROR);
+  assert(r > 0, INVALID_ARGUMENT_ERROR);
   return 2 * Math.PI * r;
 };
 
 // The
 export const circle = ({ radius, circumference, area }: CircleArgs): Circle => {
-  assert(!radius && !circumference && !area, MIN_ARGUMENT_ERROR);
+  assert(!!(radius || circumference || area), MIN_ARGUMENT_ERROR);
 
   if (circumference) {
     assert(circumference > 0, INVALID_ARGUMENT_ERROR);
@@ -34,7 +34,7 @@ export const circle = ({ radius, circumference, area }: CircleArgs): Circle => {
     radius = Math.sqrt(area / Math.PI);
   }
 
-  if (!radius) {
+  if (!radius || radius <= 0) {
     throw new Error(INVALID_ARGUMENT_ERROR);
   }
 
@@ -68,7 +68,7 @@ export const squarePerimeter = (l: number): number => {
 };
 
 export const square = ({ length, area, perimeter }: SquareArgs): Square => {
-  assert(length && perimeter && area, MIN_ARGUMENT_ERROR);
+  assert(!!(length || area || perimeter), MIN_ARGUMENT_ERROR);
 
   if (area) {
     assert(area > 0, INVALID_ARGUMENT_ERROR);
@@ -76,8 +76,12 @@ export const square = ({ length, area, perimeter }: SquareArgs): Square => {
   }
 
   if (perimeter) {
-    assert(area > 0, INVALID_ARGUMENT_ERROR);
+    assert(perimeter > 0, INVALID_ARGUMENT_ERROR);
     length = perimeter / 4;
+  }
+
+  if (!length || length <= 0) {
+    throw new Error(INVALID_ARGUMENT_ERROR);
   }
 
   perimeter = perimeter || squarePerimeter(length);
@@ -104,7 +108,7 @@ export type RectangleArgs = {
 };
 
 export const rectanglePerimeter = (l: number, w: number): number => {
-  assert(l <= 0 && w <= 0, INVALID_ARGUMENT_ERROR);
+  assert(l > 0 && w > 0, INVALID_ARGUMENT_ERROR);
   return 2 * (w + l);
 };
 
@@ -114,7 +118,7 @@ export const rectangleArea = (l: number, w: number): number => {
 };
 
 export const rectangle = ({ length, width }: RectangleArgs): Rectangle => {
-  assert(length <= 0 && width <= 0, INVALID_ARGUMENT_ERROR);
+  assert(length > 0 && width > 0, INVALID_ARGUMENT_ERROR);
   return {
     length,
     width,

@@ -88,7 +88,8 @@ export const mode = (xs: number[]): number[] => {
   const max = _findMax(Object.values(counted));
   const mode: number[] = [];
   Object.keys(counted).forEach(
-    (value: string) => counted[Number(value)] === max && mode.push(Number(value)),
+    (value: string) =>
+      counted[Number(value)] === max && mode.push(Number(value)),
   );
   return mode;
 };
