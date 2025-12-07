@@ -38,7 +38,7 @@ export const kNN = (
   dataSet: Vector[],
   labels: string[],
   inputVector: Vector,
-) => {
+): string => {
   return majorityVote(
     dataSet
       .map((dataVector, index) => ({
