@@ -13,6 +13,9 @@
     "check": "deno check mod.ts",
     "coverage": "deno test --coverage=coverage && deno coverage coverage --lcov > coverage/coverage.lcov"
   },
+  "test": {
+    "include": ["src/**/*.spec.ts"]
+  },
   "exports": {
     ".": "./mod.ts",
     "./statistics": "./src/statistics.ts",
@@ -23,6 +26,12 @@
   },
   "publish": {
     "include": ["LICENSE", "README.md", "mod.ts", "src/**/*.ts"],
-    "exclude": ["src/**/*_test.ts", ".github", "coverage", ".vscode"]
+    "exclude": [
+      "src/**/*.spec.ts",
+      ".github/**",
+      "coverage/**",
+      ".vscode/**",
+      "scripts/**"
+    ]
   }
 }
