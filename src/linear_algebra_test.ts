@@ -1,7 +1,7 @@
 import { assertAlmostEquals, assertEquals } from "@std/assert";
 import {
-  distance,
   dotProduct,
+  euclideanDistance,
   identityMatrix,
   vectorAddition,
   vectorMean,
@@ -16,7 +16,7 @@ Deno.test("dotProduct multiplies and sums", () => {
 });
 
 Deno.test("distance computes Euclidean distance", () => {
-  assertAlmostEquals(distance([0, 0], [3, 4]), 5);
+  assertAlmostEquals(euclideanDistance([0, 0], [3, 4]), 5);
 });
 
 Deno.test("vectorMean averages vectors", () => {

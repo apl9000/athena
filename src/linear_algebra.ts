@@ -61,7 +61,7 @@ export const squaredDistance = (v: Vector, w: Vector): number => {
 };
 
 /** Returns the Euclidean distance between two vectors. */
-export const distance = (v: Vector, w: Vector): number => {
+export const euclideanDistance = (v: Vector, w: Vector): number => {
   return Math.sqrt(squaredDistance(v, w));
 };
 

@@ -1,4 +1,4 @@
-import {assertEquals } from "@std/assert";
+import { assertEquals } from "@std/assert";
 import { trueOrThrow } from "@apl/athena/errors";
 
 Deno.test(trueOrThrow.name, async (test) => {
@@ -10,7 +10,7 @@ Deno.test(trueOrThrow.name, async (test) => {
       didThrow = true;
     }
     assertEquals(didThrow, false);
-  }); 
+  });
   await test.step("throws an error when condition is false", () => {
     const errorMessage = "Test error message";
     let didThrow = false;
