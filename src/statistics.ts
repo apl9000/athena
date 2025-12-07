@@ -146,15 +146,22 @@ export const interQuartileRange = (xs: number[]): number => {
   return quartile(xs, 0.75) - quartile(xs, 0.25);
 };
 
-//
+/**
+ * Returns the sample covariance between two data sets.
+ * @param xs array of numbers
+ * @param ys array of numbers (must match xs length)
+ */
 export const covariance = (xs: number[], ys: number[]): number => {
-  // Covariance measures how 2 variables vary in tandem from their means
   assert(xs.length === ys.length, SAME_LENGTH_ERROR);
   return dotProduct(deviationMean(xs), deviationMean(ys)) / (xs.length - 1);
 };
 
+/**
+ * Returns the Pearson correlation coefficient in the range [-1, 1].
+ * @param xs array of numbers
+ * @param ys array of numbers (must match xs length)
+ */
 export const correlation = (xs: number[], ys: number[]): number => {
-  // Measures how much xs & ys vary in tandem about their means
   const standardDeviationOfXs = standardDeviation(xs);
   const standardDeviationOfYs = standardDeviation(ys);
   return standardDeviationOfXs > 0 && standardDeviationOfYs > 0
