@@ -1,3 +1,8 @@
+/**
+ * Common error messages and utility functions for error handling.
+ * @module
+ */
+
 /** Error message used when no arguments are provided but at least one is required. */
 const MIN_ARGUMENT_ERROR =
   "A minimum of 1 argument must be passed to the function";

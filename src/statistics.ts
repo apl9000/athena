@@ -1,5 +1,6 @@
 /**
- * Statistics module
+ * Statistical functions for analyzing numerical data.
+ * @module
  */
 import { commonErrors, trueOrThrow } from "./errors.ts";
 import { dotProduct, sumOfSquares } from "./linear_algebra.ts";

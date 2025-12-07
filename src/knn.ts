@@ -1,3 +1,7 @@
+/**
+ * k-Nearest Neighbors (k-NN) classification algorithm.
+ * @module
+ */
 import type { Vector } from "./linear_algebra.ts";
 import { euclideanDistance } from "./linear_algebra.ts";
 

@@ -1,3 +1,7 @@
+/**
+ * Geometry-related functions and types.
+ * @module
+ */
 import { commonErrors, trueOrThrow } from "./errors.ts";
 
 // CIRCLE
