@@ -22,7 +22,7 @@
     "./errors": "./src/errors.ts"
   },
   "publish": {
-    "include": ["LICENSE", "README.md", "src/**/*.ts"],
-    "exclude": ["src/**/*_tests.ts", ".github", "coverage", ".vscode"]
+    "include": ["LICENSE", "README.md", "mod.ts", "src/**/*.ts"],
+    "exclude": ["src/**/*_test.ts", ".github", "coverage", ".vscode"]
   }
 }
