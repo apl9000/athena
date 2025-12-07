@@ -13,6 +13,7 @@ const INVALID_ARGUMENT_ERROR = "Invalid function argument";
 /** Error message used when vectors must have identical length. */
 const SAME_LENGTH_ERROR = "Vectors must be of the same length";
 
+/** Common error messages used across the library. */
 export const commonErrors = {
   MIN_ARGUMENT_ERROR,
   INVALID_ARGUMENT_ERROR,
