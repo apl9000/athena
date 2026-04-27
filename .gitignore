@@ -13,4 +13,4 @@ coverage.lcov
 .DS_Store
 
 # Internal-only docs (do not commit to public repo)
-NINJA-INTEGRATION.md
+Internal/
