@@ -1,51 +1,64 @@
-# 👩‍🔬 Athena
+# Athena
 
-Athena is a small math toolkit for statistics, geometry, and linear algebra.
+**A Swift-native backtesting engine and quant library.** Incremental event-driven core, planned vectorized MLX fast path, broker and data adapters, and financial primitives that get the boring-but-critical things right — ACB, slippage, commission, look-ahead prevention.
 
-> 🚧 Athena is a passion project and work in progress. Contributions
-> welcome—open an issue or PR!
+Athena is the open-source foundation for [stonk.ninja](https://stonk.ninja), a Canadian-first portfolio cockpit. It works standalone.
 
-## Install
+## Status
 
-```bash
-deno add jsr:@apl/athena
-```
+**v0.1 — public launch.** The event-driven engine, core types, six indicators (SMA, EMA, RSI, MACD, Bollinger Bands, ATR), simulated broker with realistic commission/slippage models (Free, Fixed, PerShare, Questrade), and a CSV data source. CI enforces ≥ 90% line coverage on every push. The worked example is a dual moving-average crossover on SPY.
 
-## Usage
+Planned for v0.2+:
 
-```ts
-import { geometry, linearAlgebra, statistics } from "jsr:@apl/athena";
+- MLX-backed vectorized engine for parameter sweeps
+- IBKR Web API and Alpaca broker adapters
+- Stop / stop-limit order semantics
+- Corporate action handling (splits, dividends, spin-offs)
+- Multi-currency portfolio with FX provider
+- Tax regimes (Canadian ACB, US wash-sale)
 
-const avg = statistics.mean([1, 2, 3]);
-const circle = geometry.circle({ radius: 2 });
-const distance = linearAlgebra.distance([0, 0], [3, 4]);
-```
-
-Or import subpaths for smaller bundles:
-
-```ts
-import { mean } from "jsr:@apl/athena/statistics";
-import { circleArea } from "jsr:@apl/athena/geometry";
-```
-
-## API highlights
-
-- `statistics`: `mean`, `median`, `variance`, `standardDeviation`,
-  `correlation`, `mode`, `range`
-- `geometry`: `circle`, `square`, `rectangle` helpers with derived properties
-- `linear_algebra`: `vectorAddition`, `dotProduct`, `distance`, `matrix`,
-  `identityMatrix`
-
-## Tasks
+## Quick start
 
 ```bash
-deno task fmt       # format
-deno task lint      # lint
-deno task test      # run tests
-deno task coverage  # generate coverage.lcov
+git clone https://github.com/rives-cloud/Athena
+cd Athena
+swift build
+swift test
+
+# Fetch SPY history from Yahoo Finance and run the worked example
+curl -L "https://query1.finance.yahoo.com/v7/finance/download/SPY?period1=1577836800&period2=1735689600&interval=1d&events=history" \
+  -o data/SPY.csv
+swift run MACrossoverExample
 ```
 
 ## Development
 
-- Tests look for `*_test.ts`.
-- CI (GitHub Actions) runs fmt, lint, and test on push/PR.
+```bash
+make test       # swift test
+make coverage   # runs scripts/coverage.sh — fails if line coverage < 90%
+make build      # swift build -c release
+```
+
+## Design principles
+
+1. **The same Strategy runs in backtest, paper, and live.** Only the Clock, DataSource, and Broker differ.
+2. **Decimal for money.** Always. FP drift on cash is not a tradeoff.
+3. **Realistic fills by default.** Commission and slippage are non-zero out of the box. Backtests that ignore these are stories, not evidence.
+4. **Actors for concurrency safety.** Portfolio and SimulatedBroker are actors; strategies are Sendable structs.
+5. **Protocol-oriented.** CommissionModel, SlippageModel, Broker, DataSource, Clock, Strategy, Indicator — each a protocol with reference implementations. Swap what you need.
+
+## Module structure
+
+```
+AthenaCore         Types, Portfolio, Clock, Strategy + Broker/Indicator protocols
+AthenaIndicators   SMA, EMA, RSI, MACD, Bollinger Bands, ATR + IndicatorCache
+AthenaBrokers      Commission/slippage models, SimulatedBroker
+AthenaData         DataSource protocol, CSV reader
+AthenaBacktest     Event-driven engine, results, metrics
+```
+
+Each module is a separate library product so downstream code imports only what it needs.
+
+## License
+
+Apache 2.0. Use it, fork it, contribute back if you extend it.

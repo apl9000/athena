@@ -1,4 +1,4 @@
-name: ci
+name: CI
 
 on:
   push:
@@ -6,36 +6,35 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  COVERAGE_THRESHOLD: "90.0"
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  build-test-coverage:
+    name: Build, Test, Coverage Gate
+    runs-on: macos-14
+    timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: v1.x
+      - name: Select Xcode 15.4
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
 
-      - name: Cache Deno dependencies
-        run: deno cache mod.ts
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
 
-      - name: Lint
-        run: deno task lint
+      - name: Build
+        run: swift build
 
-      - name: Format (check)
-        run: deno fmt --check
+      - name: Test with coverage
+        run: ./scripts/coverage.sh
 
-      - name: Test
-        run: deno task test
-
-      - name: Coverage
-        run: deno task coverage
-
-      - name: Upload coverage artifact (main only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Upload coverage report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-lcov
-          path: coverage/lcov.info
+          path: coverage.lcov
+          if-no-files-found: ignore
