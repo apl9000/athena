@@ -1,3 +1,16 @@
-node_modules
-.vscode
-/coverage
+# Swift / SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+*.xcodeproj/
+DerivedData/
+
+# Coverage artifacts
+coverage.lcov
+*.profdata
+
+# OS
+.DS_Store
+
+# Internal-only docs (do not commit to public repo)
+NINJA-INTEGRATION.md
