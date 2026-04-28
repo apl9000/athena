@@ -25,11 +25,22 @@ cd Athena
 swift build
 swift test
 
-# Fetch SPY history from Yahoo Finance and run the worked example
-curl -L "https://query1.finance.yahoo.com/v7/finance/download/SPY?period1=1577836800&period2=1735689600&interval=1d&events=history" \
-  -o data/SPY.csv
+# Fetch SPY daily history (any source that produces Date,Open,High,Low,Close,Volume)
+# and drop it at ./data/SPY.csv. The Python one-liner below uses yfinance:
+#   pip install yfinance
+#   python -c "import yfinance as yf; df=yf.download('SPY',start='2015-01-01',auto_adjust=False,progress=False); df.columns=df.columns.get_level_values(0); df.reset_index().assign(Date=lambda d: d['Date'].dt.strftime('%Y-%m-%d')).to_csv('data/SPY.csv',index=False)"
+
+# Then run any of the worked examples:
 swift run MACrossoverExample
+swift run BuyAndHoldExample
+swift run RSIMeanReversionExample
+swift run BollingerBreakoutExample
+swift run MACDSignalExample
 ```
+
+Each example prints initial/final equity, total return, max drawdown,
+annualized Sharpe, and fill count, so you can compare strategies side-by-side
+against the buy-and-hold baseline.
 
 ## Development
 

@@ -33,6 +33,12 @@ Initial public release.
   `maxDrawdown`, and `sharpe`.
 - **MACrossoverExample**: end-to-end example running a 50/200 simple moving
   average crossover strategy on SPY daily bars.
+- **BuyAndHoldExample**: baseline benchmark — buy on bar 1, hold to the end.
+- **RSIMeanReversionExample**: RSI(14) oversold/overbought entries on SPY.
+- **BollingerBreakoutExample**: long on close above the upper Bollinger band,
+  exit on a return to the middle band.
+- **MACDSignalExample**: MACD(12,26,9) signal-line crossover, with state
+  tracking so trades fire only on transitions.
 - **CI**: GitHub Actions workflow running build, test, and ≥90% line
   coverage gate on every push and PR.
 - **CD**: GitHub Actions workflow producing a release on every `v*.*.*` tag,

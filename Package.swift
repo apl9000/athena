@@ -34,6 +34,38 @@ let package = Package(
             ],
             path: "Examples/MACrossover"
         ),
+        .executableTarget(
+            name: "BuyAndHoldExample",
+            dependencies: [
+                "AthenaCore", "AthenaIndicators", "AthenaBrokers",
+                "AthenaData", "AthenaBacktest",
+            ],
+            path: "Examples/BuyAndHold"
+        ),
+        .executableTarget(
+            name: "RSIMeanReversionExample",
+            dependencies: [
+                "AthenaCore", "AthenaIndicators", "AthenaBrokers",
+                "AthenaData", "AthenaBacktest",
+            ],
+            path: "Examples/RSIMeanReversion"
+        ),
+        .executableTarget(
+            name: "BollingerBreakoutExample",
+            dependencies: [
+                "AthenaCore", "AthenaIndicators", "AthenaBrokers",
+                "AthenaData", "AthenaBacktest",
+            ],
+            path: "Examples/BollingerBreakout"
+        ),
+        .executableTarget(
+            name: "MACDSignalExample",
+            dependencies: [
+                "AthenaCore", "AthenaIndicators", "AthenaBrokers",
+                "AthenaData", "AthenaBacktest",
+            ],
+            path: "Examples/MACDSignal"
+        ),
         .testTarget(name: "AthenaCoreTests", dependencies: ["AthenaCore"]),
         .testTarget(name: "AthenaIndicatorsTests", dependencies: ["AthenaIndicators", "AthenaCore"]),
         .testTarget(name: "AthenaBrokersTests", dependencies: ["AthenaBrokers", "AthenaCore"]),

@@ -5,35 +5,45 @@ import AthenaBrokers
 import AthenaData
 import AthenaBacktest
 
-/// A deliberately simple strategy: go long when fast SMA > slow SMA, flat otherwise.
-/// This is not a money-maker. It is a vehicle for verifying that the engine does
-/// what it claims — no look-ahead, correct ACB, realistic fills, accurate metrics.
-struct MovingAverageCrossover: Strategy {
+/// MACD signal-line crossover: long when the MACD line is above the signal
+/// line, flat otherwise. Tracks the prior crossover state to fire only on
+/// transitions, not every bar.
+actor MACDSignalState {
+    var lastWasAbove: Bool? = nil
+    func transition(currentAbove: Bool) -> Bool? {
+        defer { lastWasAbove = currentAbove }
+        guard let prev = lastWasAbove else { return nil }
+        return prev == currentAbove ? nil : currentAbove
+    }
+}
+
+struct MACDSignalStrategy: Strategy {
     let symbol: Symbol
     let fast: Int
     let slow: Int
-    let positionSize: Decimal   // shares per entry
+    let signal: Int
+    let positionSize: Decimal
+    let state: MACDSignalState
 
     func onBar(_ bar: Bar, context: StrategyContext) async throws {
         guard bar.symbol == symbol else { return }
-
-        guard
-            let fastMA = await context.indicators.sma(symbol, period: fast),
-            let slowMA = await context.indicators.sma(symbol, period: slow)
+        guard let v = await context.indicators.macd(symbol, fast: fast, slow: slow, signal: signal)
         else { return }
 
-        let position = await context.portfolio.position(for: symbol)
-        let isLong = (position?.quantity ?? 0) > 0
+        let crossUp = await state.transition(currentAbove: v.macd > v.signal)
+        guard let crossUp else { return }
 
-        if fastMA > slowMA, !isLong {
+        let position = await context.portfolio.position(for: symbol)
+        let qty = position?.quantity ?? 0
+
+        if crossUp, qty == 0 {
             try await context.buy(symbol, quantity: positionSize)
-        } else if fastMA < slowMA, isLong, let pos = position {
-            try await context.sell(symbol, quantity: pos.quantity)
+        } else if !crossUp, qty > 0 {
+            try await context.sell(symbol, quantity: qty)
         }
     }
 
     func onFinish(context: StrategyContext) async throws {
-        // Close any open position so final equity isn't misleading.
         if let pos = await context.portfolio.position(for: symbol), pos.quantity > 0 {
             try await context.sell(symbol, quantity: pos.quantity)
         }
@@ -44,10 +54,7 @@ struct MovingAverageCrossover: Strategy {
 struct ExampleRunner {
     static func main() async throws {
         let spy = Symbol("SPY")
-
-        // Supply your own SPY.csv in ./data/ — Yahoo Finance export works as-is.
-        let dataURL = URL(fileURLWithPath: "./data/SPY.csv")
-        let source = CSVDataSource(path: dataURL, symbol: spy)
+        let source = CSVDataSource(path: URL(fileURLWithPath: "./data/SPY.csv"), symbol: spy)
 
         let iso = ISO8601DateFormatter()
         let start = iso.date(from: "2015-01-01T00:00:00Z")!
@@ -61,17 +68,16 @@ struct ExampleRunner {
         }
 
         let config = BacktestConfig(
-            startDate: start,
-            endDate: end,
+            startDate: start, endDate: end,
             initialCash: .usd(100_000),
             commission: FreeCommission(currency: .usd),
             slippage: FixedBpsSlippage(bps: 2)
         )
 
-        let strategy = MovingAverageCrossover(
-            symbol: spy, fast: 50, slow: 200, positionSize: 100
+        let strategy = MACDSignalStrategy(
+            symbol: spy, fast: 12, slow: 26, signal: 9, positionSize: 100,
+            state: MACDSignalState()
         )
-
         let engine = BacktestEngine(config: config, strategy: strategy, bars: bars)
         let result = try await engine.run()
 
@@ -80,7 +86,7 @@ struct ExampleRunner {
         }
 
         print("""
-        ── BACKTEST RESULT ──────────────────
+        ── BACKTEST RESULT (MACDSignal) ─────
         Initial equity:  \(result.initialEquity.amount) \(result.initialEquity.currency.rawValue)
         Final equity:    \(result.finalEquity.amount) \(result.finalEquity.currency.rawValue)
         Total return:    \(pct(result.totalReturn))
