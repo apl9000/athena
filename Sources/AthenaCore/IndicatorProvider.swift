@@ -6,7 +6,7 @@ import Foundation
 /// indicators module.
 ///
 /// Adding a new indicator accessor here is a public API change and should be
-/// treated as such — see `NINJA-INTEGRATION.md` versioning discipline.
+/// treated as such under semver.
 public protocol IndicatorProvider: Sendable {
     func sma(_ symbol: Symbol, period: Int) async -> Decimal?
     func ema(_ symbol: Symbol, period: Int) async -> Decimal?

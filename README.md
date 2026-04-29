@@ -2,7 +2,7 @@
 
 **A Swift-native backtesting engine and quant library.** Incremental event-driven core, planned vectorized MLX fast path, broker and data adapters, and financial primitives that get the boring-but-critical things right — ACB, slippage, commission, look-ahead prevention.
 
-Athena is the open-source foundation for [stonk.ninja](https://stonk.ninja), a Canadian-first portfolio cockpit. It works standalone.
+Athena is an open-source Swift quant library. It works standalone.
 
 ## Status
 
