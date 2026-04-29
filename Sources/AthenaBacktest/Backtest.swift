@@ -11,19 +11,22 @@ public struct BacktestConfig: Sendable {
     public let initialCash: Money
     public let commission: any CommissionModel
     public let slippage: any SlippageModel
+    public let corporateActions: any CorporateActionSource
 
     public init(
         startDate: Date,
         endDate: Date,
         initialCash: Money,
         commission: any CommissionModel = FreeCommission(),
-        slippage: any SlippageModel = FixedBpsSlippage(bps: 2)
+        slippage: any SlippageModel = FixedBpsSlippage(bps: 2),
+        corporateActions: any CorporateActionSource = NoCorporateActions()
     ) {
         self.startDate = startDate
         self.endDate = endDate
         self.initialCash = initialCash
         self.commission = commission
         self.slippage = slippage
+        self.corporateActions = corporateActions
     }
 }
 
@@ -79,15 +82,19 @@ public struct BacktestResult: Sendable {
 ///
 /// Loop per bar:
 ///   1. Advance the clock to the bar's timestamp
-///   2. Pending orders fill at this bar's open (with slippage + commission)
-///   3. Indicators update with this bar's close
-///   4. Strategy reacts (submits new orders for the next bar)
-///   5. Portfolio snapshots with mark-to-market at close
+///   2. Apply corporate actions effective on this date (splits, dividends)
+///      — BEFORE fills and indicators, so position quantity used in fills
+///      and indicator updates reflects the action
+///   3. Pending orders fill at this bar's open (with slippage + commission)
+///   4. Indicators update with this bar's close
+///   5. Strategy reacts (submits new orders for the next bar)
+///   6. Portfolio snapshots with mark-to-market at close
 ///
 /// This ordering ensures:
 ///   - No look-ahead bias: strategy sees the close but can only act on the next bar
 ///   - ACB is maintained correctly on every fill
 ///   - Equity curve is consistent (snapshot at close, after all fills for the bar)
+///   - Splits adjust position quantity *before* it's marked to the post-split price
 public actor BacktestEngine {
     private let config: BacktestConfig
     private let strategy: any Strategy
@@ -125,6 +132,23 @@ public actor BacktestEngine {
 
         for bar in bars where bar.timestamp >= config.startDate && bar.timestamp <= config.endDate {
             await clock.advance(to: bar.timestamp)
+
+            // Corporate actions effective today (splits / dividends) — apply
+            // before fills so post-split quantity is in place for any fills
+            // and post-dividend cash is reflected in subsequent snapshots.
+            let events = await config.corporateActions.actions(
+                for: bar.symbol, on: bar.timestamp
+            )
+            for event in events {
+                switch event.action {
+                case .split(let ratio):
+                    await portfolio.applySplit(symbol: event.symbol, ratio: ratio)
+                case .cashDividend(let perShare):
+                    await portfolio.applyCashDividend(
+                        symbol: event.symbol, perShare: perShare
+                    )
+                }
+            }
 
             // Fills (orders from previous bar)
             _ = await broker.processBarOpen(bar)

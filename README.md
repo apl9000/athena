@@ -6,14 +6,13 @@ Athena is an open-source Swift quant library. It works standalone.
 
 ## Status
 
-**v0.1 — public launch.** The event-driven engine, core types, six indicators (SMA, EMA, RSI, MACD, Bollinger Bands, ATR), simulated broker with realistic commission/slippage models (Free, Fixed, PerShare, Questrade), and a CSV data source. CI enforces ≥ 90% line coverage on every push. The worked example is a dual moving-average crossover on SPY.
+**v0.2 — correctness release.** Adds stop / stop-limit order fills and corporate-action handling (splits + cash dividends) on top of the v0.1 foundation: event-driven engine, core types, six indicators (SMA, EMA, RSI, MACD, Bollinger Bands, ATR), simulated broker with realistic commission/slippage models (Free, Fixed, PerShare, Questrade), and a CSV data source. CI enforces ≥ 90% line coverage on every push.
 
-Planned for v0.2+:
+Planned for v0.3+:
 
 - MLX-backed vectorized engine for parameter sweeps
 - IBKR Web API and Alpaca broker adapters
-- Stop / stop-limit order semantics
-- Corporate action handling (splits, dividends, spin-offs)
+- Spin-offs, stock dividends, DRIP reinvestment
 - Multi-currency portfolio with FX provider
 - Tax regimes (Canadian ACB, US wash-sale)
 
@@ -36,6 +35,7 @@ swift run BuyAndHoldExample
 swift run RSIMeanReversionExample
 swift run BollingerBreakoutExample
 swift run MACDSignalExample
+swift run ProtectiveStopExample
 ```
 
 Each example prints initial/final equity, total return, max drawdown,

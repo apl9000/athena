@@ -167,14 +167,172 @@ final class BrokersTests: XCTestCase {
         XCTAssertEqual(fills.first?.price, 102)
     }
 
-    func testStopOrderDoesNotFillInV01() async throws {
+    func testStopBuyTriggersIntraBarFillsAtStop() async throws {
         let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
         let broker = SimulatedBroker(portfolio: portfolio,
                                      commissionModel: FreeCommission(currency: .usd),
                                      slippageModel: NoSlippage())
         _ = try await broker.submit(Order(symbol: Symbol("SPY"), side: .buy, quantity: 1,
-                                          type: .stop(95), tif: .day, createdAt: Date()))
-        let fills = await broker.processBarOpen(bar(open: 90))
+                                          type: .stop(105), createdAt: Date()))
+        let fills = await broker.processBarOpen(bar(open: 100, high: 106, low: 99, close: 105))
+        XCTAssertEqual(fills.count, 1)
+        XCTAssertEqual(fills.first?.price, 105)
+    }
+
+    func testStopBuyGapThroughFillsAtOpen() async throws {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let broker = SimulatedBroker(portfolio: portfolio,
+                                     commissionModel: FreeCommission(currency: .usd),
+                                     slippageModel: NoSlippage())
+        _ = try await broker.submit(Order(symbol: Symbol("SPY"), side: .buy, quantity: 1,
+                                          type: .stop(105), createdAt: Date()))
+        // Bar gaps above the stop — worst-case fill at open
+        let fills = await broker.processBarOpen(bar(open: 110, high: 112, low: 109, close: 111))
+        XCTAssertEqual(fills.count, 1)
+        XCTAssertEqual(fills.first?.price, 110)
+    }
+
+    func testStopBuyNotTriggered() async throws {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let broker = SimulatedBroker(portfolio: portfolio,
+                                     commissionModel: FreeCommission(currency: .usd),
+                                     slippageModel: NoSlippage())
+        _ = try await broker.submit(Order(symbol: Symbol("SPY"), side: .buy, quantity: 1,
+                                          type: .stop(105), tif: .gtc, createdAt: Date()))
+        let fills = await broker.processBarOpen(bar(open: 100, high: 104, low: 99, close: 103))
+        XCTAssertEqual(fills.count, 0)
+        let open = try await broker.openOrders()
+        XCTAssertEqual(open.count, 1)  // GTC persists
+    }
+
+    func testStopSellTriggersIntraBarFillsAtStop() async throws {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        await portfolio.apply(Fill(orderId: UUID(), symbol: Symbol("SPY"), side: .buy,
+                                   quantity: 10, price: 100, commission: .usd(0),
+                                   slippageBps: 0, filledAt: Date()))
+        let broker = SimulatedBroker(portfolio: portfolio,
+                                     commissionModel: FreeCommission(currency: .usd),
+                                     slippageModel: NoSlippage())
+        _ = try await broker.submit(Order(symbol: Symbol("SPY"), side: .sell, quantity: 5,
+                                          type: .stop(95), createdAt: Date()))
+        let fills = await broker.processBarOpen(bar(open: 99, high: 100, low: 94, close: 96))
+        XCTAssertEqual(fills.count, 1)
+        XCTAssertEqual(fills.first?.price, 95)
+    }
+
+    func testStopSellGapThroughFillsAtOpen() async throws {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        await portfolio.apply(Fill(orderId: UUID(), symbol: Symbol("SPY"), side: .buy,
+                                   quantity: 10, price: 100, commission: .usd(0),
+                                   slippageBps: 0, filledAt: Date()))
+        let broker = SimulatedBroker(portfolio: portfolio,
+                                     commissionModel: FreeCommission(currency: .usd),
+                                     slippageModel: NoSlippage())
+        _ = try await broker.submit(Order(symbol: Symbol("SPY"), side: .sell, quantity: 5,
+                                          type: .stop(95), createdAt: Date()))
+        // Gap down through stop — fill at open, not at the stop price
+        let fills = await broker.processBarOpen(bar(open: 90, high: 91, low: 88, close: 89))
+        XCTAssertEqual(fills.count, 1)
+        XCTAssertEqual(fills.first?.price, 90)
+    }
+
+    func testStopBuySlippageApplied() async throws {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let broker = SimulatedBroker(portfolio: portfolio,
+                                     commissionModel: FreeCommission(currency: .usd),
+                                     slippageModel: FixedBpsSlippage(bps: 100))
+        _ = try await broker.submit(Order(symbol: Symbol("SPY"), side: .buy, quantity: 1,
+                                          type: .stop(100), createdAt: Date()))
+        let fills = await broker.processBarOpen(bar(open: 99, high: 101, low: 98, close: 100))
+        XCTAssertEqual(fills.first?.price, 101)
+        XCTAssertEqual(fills.first?.slippageBps, 100)
+    }
+
+    func testStopLimitBuyTriggersAndFillsAtLimit() async throws {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let broker = SimulatedBroker(portfolio: portfolio,
+                                     commissionModel: FreeCommission(currency: .usd),
+                                     slippageModel: NoSlippage())
+        // Triggered intra-bar: open below stop, high reaches stop, low ≤ limit
+        _ = try await broker.submit(Order(symbol: Symbol("SPY"), side: .buy, quantity: 1,
+                                          type: .stopLimit(stop: 105, limit: 106),
+                                          createdAt: Date()))
+        let fills = await broker.processBarOpen(bar(open: 100, high: 107, low: 105, close: 106))
+        XCTAssertEqual(fills.count, 1)
+        XCTAssertEqual(fills.first?.price, 106)
+    }
+
+    func testStopLimitBuyTriggeredButLimitUnreachable() async throws {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let broker = SimulatedBroker(portfolio: portfolio,
+                                     commissionModel: FreeCommission(currency: .usd),
+                                     slippageModel: NoSlippage())
+        // Triggered (high ≥ stop) but bar's low never reaches limit
+        _ = try await broker.submit(Order(symbol: Symbol("SPY"), side: .buy, quantity: 1,
+                                          type: .stopLimit(stop: 105, limit: 105),
+                                          tif: .gtc, createdAt: Date()))
+        let fills = await broker.processBarOpen(bar(open: 100, high: 106, low: 105.5, close: 106))
+        XCTAssertEqual(fills.count, 0)
+        let open = try await broker.openOrders()
+        XCTAssertEqual(open.count, 1)  // GTC persists
+    }
+
+    func testStopLimitBuyGapAboveLimitNoFill() async throws {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let broker = SimulatedBroker(portfolio: portfolio,
+                                     commissionModel: FreeCommission(currency: .usd),
+                                     slippageModel: NoSlippage())
+        _ = try await broker.submit(Order(symbol: Symbol("SPY"), side: .buy, quantity: 1,
+                                          type: .stopLimit(stop: 105, limit: 106),
+                                          createdAt: Date()))
+        // Gap above limit — unfillable
+        let fills = await broker.processBarOpen(bar(open: 110, high: 112, low: 109, close: 111))
+        XCTAssertEqual(fills.count, 0)
+    }
+
+    func testStopLimitBuyGapIntoTriggerZoneFillsAtOpen() async throws {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let broker = SimulatedBroker(portfolio: portfolio,
+                                     commissionModel: FreeCommission(currency: .usd),
+                                     slippageModel: NoSlippage())
+        // Open between stop and limit — fill at open (worst-case still within constraint)
+        _ = try await broker.submit(Order(symbol: Symbol("SPY"), side: .buy, quantity: 1,
+                                          type: .stopLimit(stop: 105, limit: 110),
+                                          createdAt: Date()))
+        let fills = await broker.processBarOpen(bar(open: 107, high: 109, low: 106, close: 108))
+        XCTAssertEqual(fills.count, 1)
+        XCTAssertEqual(fills.first?.price, 107)
+    }
+
+    func testStopLimitSellTriggersAndFillsAtLimit() async throws {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        await portfolio.apply(Fill(orderId: UUID(), symbol: Symbol("SPY"), side: .buy,
+                                   quantity: 10, price: 100, commission: .usd(0),
+                                   slippageBps: 0, filledAt: Date()))
+        let broker = SimulatedBroker(portfolio: portfolio,
+                                     commissionModel: FreeCommission(currency: .usd),
+                                     slippageModel: NoSlippage())
+        _ = try await broker.submit(Order(symbol: Symbol("SPY"), side: .sell, quantity: 5,
+                                          type: .stopLimit(stop: 95, limit: 94),
+                                          createdAt: Date()))
+        let fills = await broker.processBarOpen(bar(open: 99, high: 100, low: 93, close: 95))
+        XCTAssertEqual(fills.count, 1)
+        XCTAssertEqual(fills.first?.price, 94)
+    }
+
+    func testStopLimitSellGapBelowLimitNoFill() async throws {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        await portfolio.apply(Fill(orderId: UUID(), symbol: Symbol("SPY"), side: .buy,
+                                   quantity: 10, price: 100, commission: .usd(0),
+                                   slippageBps: 0, filledAt: Date()))
+        let broker = SimulatedBroker(portfolio: portfolio,
+                                     commissionModel: FreeCommission(currency: .usd),
+                                     slippageModel: NoSlippage())
+        _ = try await broker.submit(Order(symbol: Symbol("SPY"), side: .sell, quantity: 5,
+                                          type: .stopLimit(stop: 95, limit: 94),
+                                          createdAt: Date()))
+        // Gap below the limit — unfillable
+        let fills = await broker.processBarOpen(bar(open: 90, high: 92, low: 88, close: 91))
         XCTAssertEqual(fills.count, 0)
     }
 

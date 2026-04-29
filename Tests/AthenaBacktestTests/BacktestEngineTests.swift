@@ -177,4 +177,124 @@ final class BacktestEngineTests: XCTestCase {
             )
         }
     }
+
+    // MARK: - Corporate actions integration
+
+    /// In-memory action source for tests — no file I/O needed.
+    private struct InMemoryActionSource: CorporateActionSource {
+        let events: [CorporateActionEvent]
+        func actions(for symbol: Symbol, on date: Date) async -> [CorporateActionEvent] {
+            events.filter { $0.symbol == symbol && $0.exDate == date }
+        }
+    }
+
+    /// Strategy that buys once on the first bar and holds; verifies that
+    /// position adjustments don't disrupt the equity curve.
+    private struct BuyOnceHold: Strategy {
+        let symbol: Symbol
+        let quantity: Decimal
+        private let bought = ActorBox()
+        actor ActorBox { var done = false; func mark() { done = true } }
+        func onBar(_ bar: Bar, context: StrategyContext) async throws {
+            if await bought.done { return }
+            try await context.buy(symbol, quantity: quantity)
+            await bought.mark()
+        }
+    }
+
+    func testEngineAppliesSplitToPosition() async throws {
+        // Build bars where the price drops on the split day, mimicking real
+        // raw market data on a 4-for-1 split. Pre-split: $100. Post-split: $25.
+        var bars: [Bar] = []
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let oneDay: TimeInterval = 86_400
+        for i in 0..<10 {
+            let t = start.addingTimeInterval(Double(i) * oneDay)
+            let price: Decimal = i < 5 ? 100 : 25
+            bars.append(Bar(symbol: Symbol("SYN"), timestamp: t,
+                            open: price, high: price + 1, low: price - 1, close: price,
+                            volume: 1_000_000))
+        }
+        let splitDate = bars[5].timestamp
+        let source = InMemoryActionSource(events: [
+            CorporateActionEvent(symbol: Symbol("SYN"),
+                                 exDate: splitDate,
+                                 action: .split(ratio: 4))
+        ])
+        let config = BacktestConfig(
+            startDate: bars.first!.timestamp,
+            endDate: bars.last!.timestamp,
+            initialCash: .usd(10_000),
+            commission: FreeCommission(currency: .usd),
+            slippage: NoSlippage(),
+            corporateActions: source
+        )
+        let engine = BacktestEngine(
+            config: config,
+            strategy: BuyOnceHold(symbol: Symbol("SYN"), quantity: 10),
+            bars: bars
+        )
+        let result = try await engine.run()
+        // 10 shares bought day 1, split 4-for-1 on day 5 → 40 shares
+        let finalQty = result.snapshots.last?.positions[Symbol("SYN")] ?? 0
+        XCTAssertEqual(finalQty, 40)
+        // With raw bars that drop on split day + position multiplier,
+        // equity is continuous across the split: 10 × $100 = $1000 marked,
+        // post-split 40 × $25 = $1000 marked. No phantom drawdown.
+        let preIdx = result.snapshots.firstIndex { $0.timestamp == bars[4].timestamp }!
+        let postIdx = result.snapshots.firstIndex { $0.timestamp == splitDate }!
+        let preEquity = result.snapshots[preIdx].totalValue.amount
+        let postEquity = result.snapshots[postIdx].totalValue.amount
+        XCTAssertEqual(preEquity, postEquity)
+    }
+
+    func testEngineAppliesCashDividend() async throws {
+        let bars = syntheticBars(10)
+        let divDate = bars[3].timestamp
+        let source = InMemoryActionSource(events: [
+            CorporateActionEvent(symbol: Symbol("SYN"),
+                                 exDate: divDate,
+                                 action: .cashDividend(perShare: .usd(1)))
+        ])
+        let config = BacktestConfig(
+            startDate: bars.first!.timestamp,
+            endDate: bars.last!.timestamp,
+            initialCash: .usd(10_000),
+            commission: FreeCommission(currency: .usd),
+            slippage: NoSlippage(),
+            corporateActions: source
+        )
+        let engine = BacktestEngine(
+            config: config,
+            strategy: BuyOnceHold(symbol: Symbol("SYN"), quantity: 10),
+            bars: bars
+        )
+        let result = try await engine.run()
+        // 10 shares × $1 dividend = $10 cash credit on top of the buy-and-hold result.
+        // Find the snapshot just before and at the dividend date — cash should jump $10.
+        let beforeIdx = result.snapshots.firstIndex { $0.timestamp == bars[2].timestamp }!
+        let atIdx = result.snapshots.firstIndex { $0.timestamp == divDate }!
+        let cashBefore = result.snapshots[beforeIdx].cash[.usd] ?? 0
+        let cashAt = result.snapshots[atIdx].cash[.usd] ?? 0
+        XCTAssertEqual(cashAt - cashBefore, 10)
+    }
+
+    func testEngineWithoutActionSourceIsUnaffected() async throws {
+        let bars = syntheticBars(10)
+        let config = BacktestConfig(
+            startDate: bars.first!.timestamp,
+            endDate: bars.last!.timestamp,
+            initialCash: .usd(10_000),
+            commission: FreeCommission(currency: .usd),
+            slippage: NoSlippage()
+        )
+        let engine = BacktestEngine(
+            config: config,
+            strategy: BuyOnceHold(symbol: Symbol("SYN"), quantity: 10),
+            bars: bars
+        )
+        let result = try await engine.run()
+        let finalQty = result.snapshots.last?.positions[Symbol("SYN")] ?? 0
+        XCTAssertEqual(finalQty, 10)  // unchanged — no actions applied
+    }
 }

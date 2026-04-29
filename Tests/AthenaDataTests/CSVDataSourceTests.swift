@@ -144,4 +144,77 @@ final class CSVDataSourceTests: XCTestCase {
         XCTAssertLessThan(bars[0].timestamp, bars[1].timestamp)
         XCTAssertLessThan(bars[1].timestamp, bars[2].timestamp)
     }
+
+    // MARK: - CSVCorporateActionSource
+
+    func testCorpActionSourceParsesSplitsAndDividends() async throws {
+        let csv = """
+        Date,Symbol,Type,Value
+        2020-08-31,AAPL,split,4
+        2024-02-15,AAPL,cashDividend,0.24
+        2024-02-15,KO,cashDividend,0.46
+        """
+        let url = try writeTempCSV(csv)
+        let source = CSVCorporateActionSource(path: url, dividendCurrency: .usd)
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(identifier: "America/New_York")!
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+
+        let splitDay = formatter.date(from: "2020-08-31")!
+        let splits = await source.actions(for: Symbol("AAPL"), on: splitDay)
+        XCTAssertEqual(splits.count, 1)
+        if case .split(let ratio) = splits.first?.action {
+            XCTAssertEqual(ratio, 4)
+        } else { XCTFail("expected split") }
+
+        let divDay = formatter.date(from: "2024-02-15")!
+        let divs = await source.actions(for: Symbol("AAPL"), on: divDay)
+        XCTAssertEqual(divs.count, 1)
+        if case .cashDividend(let perShare) = divs.first?.action {
+            XCTAssertEqual(perShare.amount, Decimal(string: "0.24"))
+            XCTAssertEqual(perShare.currency, .usd)
+        } else { XCTFail("expected dividend") }
+
+        // Symbol filter
+        let koDivs = await source.actions(for: Symbol("KO"), on: divDay)
+        XCTAssertEqual(koDivs.count, 1)
+    }
+
+    func testCorpActionSourceReturnsEmptyForUnknownDate() async throws {
+        let csv = """
+        Date,Symbol,Type,Value
+        2020-08-31,AAPL,split,4
+        """
+        let url = try writeTempCSV(csv)
+        let source = CSVCorporateActionSource(path: url)
+        let result = await source.actions(for: Symbol("AAPL"),
+                                          on: Date(timeIntervalSince1970: 0))
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    func testCorpActionSourceMissingFileReturnsEmpty() async {
+        let url = URL(fileURLWithPath: "/tmp/nope-\(UUID().uuidString).csv")
+        let source = CSVCorporateActionSource(path: url)
+        let result = await source.actions(for: Symbol("AAPL"), on: Date())
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    func testCorpActionSourceIgnoresUnknownTypes() async throws {
+        let csv = """
+        Date,Symbol,Type,Value
+        2020-08-31,AAPL,spinoff,1
+        2020-08-31,AAPL,split,2
+        """
+        let url = try writeTempCSV(csv)
+        let source = CSVCorporateActionSource(path: url)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(identifier: "America/New_York")!
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let day = formatter.date(from: "2020-08-31")!
+        let result = await source.actions(for: Symbol("AAPL"), on: day)
+        XCTAssertEqual(result.count, 1)  // spinoff silently skipped
+    }
 }

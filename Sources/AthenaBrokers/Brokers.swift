@@ -123,8 +123,15 @@ public struct VolumeImpactSlippage: SlippageModel {
 ///   - Orders submitted during bar N fill at bar N+1's open (with slippage).
 ///   - This avoids look-ahead bias. Some backtesters fill at bar N's close,
 ///     which is technically a look-ahead if the strategy decided based on close.
-///   - Limit orders fill if the bar trades through the limit price.
-///   - Stop / stopLimit orders are stubbed in v0.1 — extend as needed.
+///   - Limit orders fill at the limit price if the bar trades through it
+///     (pessimistic — no price improvement assumed).
+///   - Stop orders trigger when the bar's high (buy) / low (sell) reaches the
+///     stop price, then fill as market-on-trigger. On a gap-through the open
+///     (open beyond the stop), the fill is at the open — realistic worst case.
+///     Slippage is applied on top of the trigger reference.
+///   - Stop-limit orders trigger like stops, then fill within the bar only if
+///     the limit is reachable. If the bar opens beyond the limit (gap through),
+///     no fill — the order stays open if GTC, otherwise expires with the day.
 public actor SimulatedBroker: Broker {
     private let portfolio: Portfolio
     private let commissionModel: CommissionModel
@@ -191,9 +198,56 @@ public actor SimulatedBroker: Broker {
             return await makeFill(order: order, fillPrice: limitPrice, bar: bar,
                                   referenceForSlippage: limitPrice)
 
-        case .stop, .stopLimit:
-            // TODO: stop-order semantics in v0.2
-            return nil
+        case .stop(let stopPrice):
+            guard let triggerRef = Self.stopTriggerRef(
+                side: order.side, stopPrice: stopPrice, bar: bar
+            ) else { return nil }
+            let fillPrice = slippageModel.fillPrice(
+                referencePrice: triggerRef, order: order, bar: bar
+            )
+            return await makeFill(order: order, fillPrice: fillPrice, bar: bar,
+                                  referenceForSlippage: triggerRef)
+
+        case .stopLimit(let stopPrice, let limitPrice):
+            guard let fillPrice = Self.stopLimitFillPrice(
+                side: order.side, stop: stopPrice, limit: limitPrice, bar: bar
+            ) else { return nil }
+            return await makeFill(order: order, fillPrice: fillPrice, bar: bar,
+                                  referenceForSlippage: fillPrice)
+        }
+    }
+
+    /// Reference price for a triggered stop. Returns nil if the stop did not trigger.
+    /// Buy stop triggers when bar.high reaches the stop; gap-up through the stop
+    /// fills at the open. Sell stop is symmetric.
+    static func stopTriggerRef(side: Side, stopPrice: Decimal, bar: Bar) -> Decimal? {
+        switch side {
+        case .buy:
+            guard bar.high >= stopPrice else { return nil }
+            return Swift.max(stopPrice, bar.open)
+        case .sell:
+            guard bar.low <= stopPrice else { return nil }
+            return Swift.min(stopPrice, bar.open)
+        }
+    }
+
+    /// Fill price for a stop-limit order, or nil if it did not trigger or could not fill.
+    /// Pessimistic: fills at the limit price unless the bar opens between stop and
+    /// limit (then fills at open, which is worse than the limit for the trader).
+    static func stopLimitFillPrice(
+        side: Side, stop: Decimal, limit: Decimal, bar: Bar
+    ) -> Decimal? {
+        switch side {
+        case .buy:
+            guard bar.high >= stop else { return nil }
+            if bar.open > limit { return nil }       // gapped above limit — unfillable
+            if bar.open >= stop { return bar.open }  // gap into trigger zone
+            return bar.low <= limit ? limit : nil    // triggered intra-bar
+        case .sell:
+            guard bar.low <= stop else { return nil }
+            if bar.open < limit { return nil }
+            if bar.open <= stop { return bar.open }
+            return bar.high >= limit ? limit : nil
         }
     }
 

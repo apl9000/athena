@@ -268,5 +268,78 @@ final class AthenaCoreTests: XCTestCase {
         try await NoopStrategy().onStart(context: ctx)
         try await NoopStrategy().onFinish(context: ctx)
     }
+
+    // MARK: - Corporate actions
+
+    func testApplySplitWholeRatio() async {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        await portfolio.apply(Fill(orderId: UUID(), symbol: Symbol("AAPL"), side: .buy,
+                                   quantity: 10, price: 400, commission: .usd(0),
+                                   slippageBps: 0, filledAt: Date()))
+        await portfolio.applySplit(symbol: Symbol("AAPL"), ratio: 4)
+        let pos = await portfolio.position(for: Symbol("AAPL"))
+        XCTAssertEqual(pos?.quantity, 40)
+        XCTAssertEqual(pos?.avgCost, 100)
+        // Total cost basis preserved
+        XCTAssertEqual((pos?.quantity ?? 0) * (pos?.avgCost ?? 0), 4_000)
+    }
+
+    func testApplySplitFractionalRatio() async {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        await portfolio.apply(Fill(orderId: UUID(), symbol: Symbol("XYZ"), side: .buy,
+                                   quantity: 100, price: 30, commission: .usd(0),
+                                   slippageBps: 0, filledAt: Date()))
+        await portfolio.applySplit(symbol: Symbol("XYZ"), ratio: Decimal(string: "1.5")!)
+        let pos = await portfolio.position(for: Symbol("XYZ"))
+        XCTAssertEqual(pos?.quantity, 150)
+        XCTAssertEqual(pos?.avgCost, 20)
+    }
+
+    func testApplySplitNoOpForMissingPosition() async {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        await portfolio.applySplit(symbol: Symbol("NONE"), ratio: 4)
+        let pos = await portfolio.position(for: Symbol("NONE"))
+        XCTAssertNil(pos)
+    }
+
+    func testApplyCashDividendCreditsCash() async {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        await portfolio.apply(Fill(orderId: UUID(), symbol: Symbol("KO"), side: .buy,
+                                   quantity: 100, price: 60, commission: .usd(0),
+                                   slippageBps: 0, filledAt: Date()))
+        let cashBefore = await portfolio.cashBalance(in: .usd).amount
+        await portfolio.applyCashDividend(symbol: Symbol("KO"),
+                                          perShare: Money(Decimal(string: "0.46")!, .usd))
+        let cashAfter = await portfolio.cashBalance(in: .usd).amount
+        XCTAssertEqual(cashAfter - cashBefore, 46)
+        // ACB unchanged
+        let pos = await portfolio.position(for: Symbol("KO"))
+        XCTAssertEqual(pos?.avgCost, 60)
+    }
+
+    func testApplyCashDividendNoOpForFlatPosition() async {
+        let portfolio = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        await portfolio.applyCashDividend(symbol: Symbol("KO"), perShare: .usd(1))
+        let cash = await portfolio.cashBalance(in: .usd).amount
+        XCTAssertEqual(cash, 10_000)
+    }
+
+    func testCorporateActionEventTypes() {
+        let split = CorporateAction.split(ratio: 4)
+        let div = CorporateAction.cashDividend(perShare: .usd(1))
+        XCTAssertNotEqual(split, div)
+        let event = CorporateActionEvent(
+            symbol: Symbol("AAPL"),
+            exDate: Date(timeIntervalSince1970: 1_598_832_000),
+            action: split
+        )
+        XCTAssertEqual(event.symbol, Symbol("AAPL"))
+    }
+
+    func testNoCorporateActionsReturnsEmpty() async {
+        let source = NoCorporateActions()
+        let events = await source.actions(for: Symbol("AAPL"), on: Date())
+        XCTAssertTrue(events.isEmpty)
+    }
 }
 

@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - TBD
+
+The "Correctness Release". Closes two known v0.1 limitations: stop/stop-limit
+order fills and corporate actions (splits + cash dividends). Additive,
+non-breaking — existing v0.1 strategies continue to work unchanged.
+
+### Added
+
+- **AthenaBrokers**: stop and stop-limit order fill semantics in
+  `SimulatedBroker`. Stops trigger when bar high/low crosses the stop
+  price; gap-throughs fill at the open as worst-case. Stop-limits convert
+  to a limit order at the limit price on trigger; gap-through-limit
+  fills at open if open is on the favorable side, otherwise fills at
+  limit if reached intra-bar.
+- **AthenaCore**: `CorporateAction` enum (`.split(ratio:)`,
+  `.cashDividend(perShare:)`), `CorporateActionEvent`,
+  `CorporateActionSource` protocol, `NoCorporateActions` default.
+  `Portfolio` gains `applySplit(symbol:ratio:)` (multiplies share count,
+  divides per-share ACB; total cost basis preserved) and
+  `applyCashDividend(symbol:perShare:)` (credits cash, no ACB change).
+- **AthenaData**: `CSVCorporateActionSource` reading
+  `Date,Symbol,Type,Value` schema with `split` and `cashDividend` types.
+- **AthenaBacktest**: `BacktestConfig.corporateActions` parameter; engine
+  applies actions at the start of each bar before broker fills and
+  indicator updates.
+- **ProtectiveStopExample**: demonstrates a buy-and-hold position with a
+  10% protective stop using a GTC sell stop order.
+
+### Design notes
+
+- **Position adjustment, not price adjustment.** Bars stay raw; positions
+  and cash adjust on ex-date. Strategies see real prices (matching live
+  trading). If you use pre-adjusted bars (e.g. Yahoo "Adj Close"), simply
+  omit a corporate-action source.
+
+### Known limitations
+
+- Spin-offs not yet supported (complex ACB allocation, deferred).
+- Stock dividends and DRIP reinvestment not yet supported.
+- Return-of-capital tax treatment deferred to a future TaxRegime release.
+- Multi-currency FX adjustments on USD dividends deferred to multi-currency
+  phase.
+- No tax-aware accounting (deferred to a future release).
+- macOS only in CI; Linux support is best-effort.
+- Real market data is not committed; users provide their own.
+
 ## [0.1.0] - TBD
 
 Initial public release.
@@ -47,11 +93,9 @@ Initial public release.
 
 ### Known limitations
 
-- Stop and stop-limit orders are accepted but not yet filled (returns nil).
-- No corporate actions (splits, dividends, spin-offs).
-- No tax-aware accounting (deferred to v0.2).
 - macOS only in CI; Linux support is best-effort.
 - Real market data (`data/SPY.csv`) is not committed; users provide their own.
 
-[Unreleased]: https://github.com/rives-cloud/Athena/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/rives-cloud/Athena/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/rives-cloud/Athena/releases/tag/v0.2.0
 [0.1.0]: https://github.com/rives-cloud/Athena/releases/tag/v0.1.0

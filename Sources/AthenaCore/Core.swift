@@ -282,6 +282,27 @@ public actor Portfolio {
         fills.append(fill)
     }
 
+    /// Apply a stock split to the held position. Total cost basis is preserved:
+    /// shares are multiplied by `ratio`, per-share ACB is divided by `ratio`.
+    /// No-op if the position is missing or zero. Cash is unaffected.
+    public func applySplit(symbol: Symbol, ratio: Decimal) {
+        precondition(ratio > 0, "Split ratio must be positive")
+        guard var pos = positions[symbol], pos.quantity != 0 else { return }
+        pos.quantity = pos.quantity * ratio
+        pos.avgCost = pos.avgCost / ratio
+        positions[symbol] = pos
+    }
+
+    /// Apply an ordinary cash dividend. Credits cash in the dividend's currency
+    /// at `perShare * quantity_held`. ACB is unchanged — ordinary dividends are
+    /// taxable income, not a return of capital. No-op if the position is missing
+    /// or zero on the ex-date.
+    public func applyCashDividend(symbol: Symbol, perShare: Money) {
+        guard let pos = positions[symbol], pos.quantity > 0 else { return }
+        let credit = perShare.amount * pos.quantity
+        cash[perShare.currency, default: 0] += credit
+    }
+
     /// Snapshot equity at a timestamp given the current marks.
     @discardableResult
     public func snapshot(at timestamp: Date, marks: [Symbol: Decimal]) -> PortfolioSnapshot {
