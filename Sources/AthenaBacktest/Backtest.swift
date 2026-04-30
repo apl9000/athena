@@ -12,6 +12,7 @@ public struct BacktestConfig: Sendable {
     public let commission: any CommissionModel
     public let slippage: any SlippageModel
     public let corporateActions: any CorporateActionSource
+    public let taxRegime: any TaxRegime
 
     public init(
         startDate: Date,
@@ -19,7 +20,8 @@ public struct BacktestConfig: Sendable {
         initialCash: Money,
         commission: any CommissionModel = FreeCommission(),
         slippage: any SlippageModel = FixedBpsSlippage(bps: 2),
-        corporateActions: any CorporateActionSource = NoCorporateActions()
+        corporateActions: any CorporateActionSource = NoCorporateActions(),
+        taxRegime: any TaxRegime = NoTaxes()
     ) {
         self.startDate = startDate
         self.endDate = endDate
@@ -27,6 +29,7 @@ public struct BacktestConfig: Sendable {
         self.commission = commission
         self.slippage = slippage
         self.corporateActions = corporateActions
+        self.taxRegime = taxRegime
     }
 }
 
@@ -37,6 +40,27 @@ public struct BacktestResult: Sendable {
     public let finalEquity: Money
     public let snapshots: [PortfolioSnapshot]
     public let fills: [Fill]
+    public let dispositions: [Disposition]
+    public let taxYearSummaries: [TaxYearSummary]
+    public let finalLots: [TaxLot]
+
+    public init(
+        initialEquity: Money,
+        finalEquity: Money,
+        snapshots: [PortfolioSnapshot],
+        fills: [Fill],
+        dispositions: [Disposition] = [],
+        taxYearSummaries: [TaxYearSummary] = [],
+        finalLots: [TaxLot] = []
+    ) {
+        self.initialEquity = initialEquity
+        self.finalEquity = finalEquity
+        self.snapshots = snapshots
+        self.fills = fills
+        self.dispositions = dispositions
+        self.taxYearSummaries = taxYearSummaries
+        self.finalLots = finalLots
+    }
 
     public var totalReturn: Decimal {
         guard initialEquity.amount > 0 else { return 0 }
@@ -114,7 +138,8 @@ public actor BacktestEngine {
         let broker = SimulatedBroker(
             portfolio: portfolio,
             commissionModel: config.commission,
-            slippageModel: config.slippage
+            slippageModel: config.slippage,
+            taxRegime: config.taxRegime
         )
         let clock = BacktestClock(start: config.startDate)
         let indicators = IndicatorCache()
@@ -170,11 +195,23 @@ public actor BacktestEngine {
         let snapshots = await portfolio.history
         let allFills = await portfolio.fills
 
+        // Tax reconciliation: wash-sale / superficial-loss adjustments after
+        // the 30-day forward window has closed (i.e., end of run).
+        let provisional = await broker.recordedDispositions()
+        let lotHistory = await portfolio.lotHistory
+        let (reconciled, adjustedLots) = config.taxRegime.reconcileDisallowance(
+            dispositions: provisional, lotHistory: lotHistory
+        )
+        let summaries = TaxYearSummary.summarize(reconciled)
+
         return BacktestResult(
             initialEquity: config.initialCash,
             finalEquity: finalEquity,
             snapshots: snapshots,
-            fills: allFills
+            fills: allFills,
+            dispositions: reconciled,
+            taxYearSummaries: summaries,
+            finalLots: adjustedLots
         )
     }
 }

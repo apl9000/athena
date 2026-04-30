@@ -297,4 +297,82 @@ final class BacktestEngineTests: XCTestCase {
         let finalQty = result.snapshots.last?.positions[Symbol("SYN")] ?? 0
         XCTAssertEqual(finalQty, 10)  // unchanged — no actions applied
     }
+
+    // MARK: - Tax regime integration
+
+    func testEngineEmitsDispositionsAndYearSummary() async throws {
+        let cal = Calendar(identifier: .gregorian)
+        let start = cal.date(from: DateComponents(year: 2024, month: 1, day: 1))!
+        let oneDay: TimeInterval = 86_400
+        var bars: [Bar] = []
+        let prices: [Decimal] = [100, 102, 104, 106, 108]
+        for (i, p) in prices.enumerated() {
+            bars.append(Bar(symbol: Symbol("X"),
+                            timestamp: start.addingTimeInterval(Double(i) * oneDay),
+                            open: p, high: p + 1, low: p - 1, close: p, volume: 1_000_000))
+        }
+        let config = BacktestConfig(
+            startDate: bars.first!.timestamp,
+            endDate: bars.last!.timestamp,
+            initialCash: .usd(10_000),
+            commission: FreeCommission(currency: .usd),
+            slippage: NoSlippage(),
+            taxRegime: USWashSale()
+        )
+        let engine = BacktestEngine(
+            config: config,
+            strategy: BuyOnceSellOnceStrategy(symbol: Symbol("X"), sellOn: bars[3].timestamp),
+            bars: bars
+        )
+        let result = try await engine.run()
+        XCTAssertGreaterThanOrEqual(result.dispositions.count, 1)
+        XCTAssertGreaterThan(result.dispositions[0].realizedPnL.amount, 0)
+        XCTAssertEqual(result.taxYearSummaries.count, 1)
+        XCTAssertEqual(result.taxYearSummaries[0].year, 2024)
+        XCTAssertGreaterThan(result.taxYearSummaries[0].netRealized, 0)
+    }
+
+    func testEngineWithoutRegimeEmitsNoTaxArtifacts() async throws {
+        let bars = syntheticBars(20)
+        let config = BacktestConfig(
+            startDate: bars.first!.timestamp,
+            endDate: bars.last!.timestamp,
+            initialCash: .usd(10_000),
+            commission: FreeCommission(currency: .usd),
+            slippage: NoSlippage()
+        )
+        let engine = BacktestEngine(
+            config: config,
+            strategy: BuyOnceSellOnceStrategy(symbol: Symbol("SYN"), sellOn: bars[5].timestamp),
+            bars: bars
+        )
+        let result = try await engine.run()
+        XCTAssertTrue(result.dispositions.isEmpty)
+        XCTAssertTrue(result.taxYearSummaries.isEmpty)
+        XCTAssertTrue(result.finalLots.isEmpty)
+    }
+}
+
+// MARK: - Strategy helpers
+
+private actor BuySellFlags {
+    var bought = false
+    var sold = false
+    func markBought() { bought = true }
+    func markSold() { sold = true }
+}
+
+private struct BuyOnceSellOnceStrategy: Strategy {
+    let symbol: Symbol
+    let sellOn: Date
+    private let flags = BuySellFlags()
+    func onBar(_ bar: Bar, context: StrategyContext) async throws {
+        if !(await flags.bought) {
+            try await context.buy(symbol, quantity: 10)
+            await flags.markBought()
+        } else if !(await flags.sold) && bar.timestamp >= sellOn {
+            try await context.sell(symbol, quantity: 10)
+            await flags.markSold()
+        }
+    }
 }

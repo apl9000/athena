@@ -341,5 +341,334 @@ final class AthenaCoreTests: XCTestCase {
         let events = await source.actions(for: Symbol("AAPL"), on: Date())
         XCTAssertTrue(events.isEmpty)
     }
-}
 
+    // MARK: - Tax types
+
+    func testHoldingPeriodBoundaryAt365Days() {
+        let cal = Calendar(identifier: .gregorian)
+        let open = Date(timeIntervalSince1970: 1_700_000_000)
+        let exactly365 = cal.date(byAdding: .day, value: 365, to: open)!
+        let day366 = cal.date(byAdding: .day, value: 366, to: open)!
+        XCTAssertEqual(HoldingPeriod.classify(openDate: open, closeDate: exactly365), .shortTerm)
+        XCTAssertEqual(HoldingPeriod.classify(openDate: open, closeDate: day366), .longTerm)
+    }
+
+    func testHoldingPeriodLeapYearMath() {
+        let cal = Calendar(identifier: .gregorian)
+        // Open during a leap year, close just past 365 days
+        let open = cal.date(from: DateComponents(year: 2024, month: 1, day: 15))!
+        let day366 = cal.date(byAdding: .day, value: 366, to: open)!
+        XCTAssertEqual(HoldingPeriod.classify(openDate: open, closeDate: day366), .longTerm)
+    }
+
+    func testTaxLotTotalCost() {
+        let lot = TaxLot(symbol: Symbol("ABC"), openDate: Date(), quantity: 100, costBasis: 25)
+        XCTAssertEqual(lot.totalCost, 2500)
+    }
+
+    func testDispositionTaxableWithoutDisallowance() {
+        let d = Disposition(
+            symbol: Symbol("ABC"), openDate: Date(), closeDate: Date(),
+            quantity: 10,
+            proceeds: .usd(1100), costBasis: .usd(1000),
+            realizedPnL: .usd(100), holdingPeriod: .shortTerm
+        )
+        XCTAssertEqual(d.taxableRealizedPnL.amount, 100)
+    }
+
+    func testDispositionTaxableWithDisallowance() {
+        let d = Disposition(
+            symbol: Symbol("ABC"), openDate: Date(), closeDate: Date(),
+            quantity: 10,
+            proceeds: .usd(900), costBasis: .usd(1000),
+            realizedPnL: .usd(-100), holdingPeriod: .shortTerm,
+            washSaleDisallowed: .usd(100)
+        )
+        // Disallowed loss is added back to taxable amount → 0
+        XCTAssertEqual(d.taxableRealizedPnL.amount, 0)
+    }
+
+    // MARK: - TaxYearSummary
+
+    func testTaxYearSummaryAggregates() {
+        let cal = Calendar(identifier: .gregorian)
+        let d2024 = cal.date(from: DateComponents(year: 2024, month: 6, day: 15))!
+        let d2025 = cal.date(from: DateComponents(year: 2025, month: 3, day: 1))!
+        let dispositions = [
+            Disposition(symbol: Symbol("A"), openDate: d2024, closeDate: d2024,
+                        quantity: 1, proceeds: .usd(150), costBasis: .usd(100),
+                        realizedPnL: .usd(50), holdingPeriod: .shortTerm),
+            Disposition(symbol: Symbol("B"), openDate: d2024, closeDate: d2024,
+                        quantity: 1, proceeds: .usd(80), costBasis: .usd(100),
+                        realizedPnL: .usd(-20), holdingPeriod: .longTerm),
+            Disposition(symbol: Symbol("C"), openDate: d2025, closeDate: d2025,
+                        quantity: 1, proceeds: .usd(200), costBasis: .usd(150),
+                        realizedPnL: .usd(50), holdingPeriod: .longTerm),
+        ]
+        let summaries = TaxYearSummary.summarize(dispositions)
+        XCTAssertEqual(summaries.count, 2)
+        let y2024 = summaries.first { $0.year == 2024 }!
+        XCTAssertEqual(y2024.grossGain, 50)
+        XCTAssertEqual(y2024.grossLoss, -20)
+        XCTAssertEqual(y2024.netRealized, 30)
+        XCTAssertEqual(y2024.shortTermNet, 50)
+        XCTAssertEqual(y2024.longTermNet, -20)
+        let y2025 = summaries.first { $0.year == 2025 }!
+        XCTAssertEqual(y2025.netRealized, 50)
+        XCTAssertEqual(y2025.longTermNet, 50)
+    }
+
+    // MARK: - Portfolio with tax regime
+
+    func testPortfolioOpensLotOnBuyWithRegime() async {
+        let p = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let buy = Fill(orderId: UUID(), symbol: Symbol("AAPL"), side: .buy,
+                       quantity: 10, price: 100,
+                       commission: .usd(0), slippageBps: 0, filledAt: Date())
+        await p.apply(buy, taxRegime: USWashSale())
+        let lots = await p.lots[Symbol("AAPL")] ?? []
+        XCTAssertEqual(lots.count, 1)
+        XCTAssertEqual(lots[0].quantity, 10)
+        XCTAssertEqual(lots[0].costBasis, 100)
+    }
+
+    func testPortfolioConsumesLotsFIFOOnSell() async {
+        let p = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let cal = Calendar(identifier: .gregorian)
+        let d1 = cal.date(from: DateComponents(year: 2024, month: 1, day: 1))!
+        let d2 = cal.date(byAdding: .day, value: 30, to: d1)!
+        let d3 = cal.date(byAdding: .day, value: 60, to: d1)!
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("AAPL"), side: .buy,
+                           quantity: 10, price: 100, commission: .usd(0),
+                           slippageBps: 0, filledAt: d1), taxRegime: USWashSale())
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("AAPL"), side: .buy,
+                           quantity: 10, price: 110, commission: .usd(0),
+                           slippageBps: 0, filledAt: d2), taxRegime: USWashSale())
+        let dispositions = await p.apply(
+            Fill(orderId: UUID(), symbol: Symbol("AAPL"), side: .sell,
+                 quantity: 15, price: 120, commission: .usd(0),
+                 slippageBps: 0, filledAt: d3),
+            taxRegime: USWashSale())
+        XCTAssertEqual(dispositions.count, 2)
+        // First disposition closes the full first lot (10 @ 100)
+        XCTAssertEqual(dispositions[0].quantity, 10)
+        XCTAssertEqual(dispositions[0].costBasis.amount, 1000)
+        XCTAssertEqual(dispositions[0].realizedPnL.amount, 200)
+        // Second closes 5 from the second lot (5 @ 110)
+        XCTAssertEqual(dispositions[1].quantity, 5)
+        XCTAssertEqual(dispositions[1].costBasis.amount, 550)
+        XCTAssertEqual(dispositions[1].realizedPnL.amount, 50)
+        // Remaining lot: 5 @ 110
+        let remaining = await p.lots[Symbol("AAPL")] ?? []
+        XCTAssertEqual(remaining.count, 1)
+        XCTAssertEqual(remaining[0].quantity, 5)
+    }
+
+    func testPortfolioSplitAdjustsLots() async {
+        let p = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("AAPL"), side: .buy,
+                           quantity: 10, price: 400, commission: .usd(0),
+                           slippageBps: 0, filledAt: Date()),
+                      taxRegime: USWashSale())
+        await p.applySplit(symbol: Symbol("AAPL"), ratio: 4)
+        let lots = await p.lots[Symbol("AAPL")] ?? []
+        XCTAssertEqual(lots.count, 1)
+        XCTAssertEqual(lots[0].quantity, 40)
+        XCTAssertEqual(lots[0].costBasis, 100)
+        XCTAssertEqual(lots[0].quantity * lots[0].costBasis, 4000)  // total cost preserved
+    }
+
+    func testPortfolioWithoutRegimeKeepsNoLots() async {
+        let p = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let buy = Fill(orderId: UUID(), symbol: Symbol("AAPL"), side: .buy,
+                       quantity: 10, price: 100,
+                       commission: .usd(0), slippageBps: 0, filledAt: Date())
+        await p.apply(buy)  // default NoTaxes
+        let lots = await p.lots[Symbol("AAPL")] ?? []
+        XCTAssertTrue(lots.isEmpty)
+    }
+
+    // MARK: - USWashSale rule
+
+    func testUSWashSaleDisallowsLossWithinWindow() async {
+        // Buy 10 @ 100 day 0; sell 10 @ 80 day 30 (loss); buy 10 @ 85 day 45 (within 30 days)
+        let cal = Calendar(identifier: .gregorian)
+        let d0 = cal.date(from: DateComponents(year: 2024, month: 1, day: 1))!
+        let d30 = cal.date(byAdding: .day, value: 30, to: d0)!
+        let d45 = cal.date(byAdding: .day, value: 45, to: d0)!
+        let p = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let regime = USWashSale()
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("X"), side: .buy,
+                           quantity: 10, price: 100, commission: .usd(0),
+                           slippageBps: 0, filledAt: d0), taxRegime: regime)
+        let provisional = await p.apply(
+            Fill(orderId: UUID(), symbol: Symbol("X"), side: .sell,
+                 quantity: 10, price: 80, commission: .usd(0),
+                 slippageBps: 0, filledAt: d30), taxRegime: regime)
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("X"), side: .buy,
+                           quantity: 10, price: 85, commission: .usd(0),
+                           slippageBps: 0, filledAt: d45), taxRegime: regime)
+        let history = await p.lotHistory
+        let (adj, lots) = regime.reconcileDisallowance(
+            dispositions: provisional, lotHistory: history)
+        XCTAssertEqual(adj.count, 1)
+        // Loss was -200; replacement lot covers all 10 shares → fully disallowed
+        XCTAssertEqual(adj[0].washSaleDisallowed?.amount, 200)
+        XCTAssertEqual(adj[0].taxableRealizedPnL.amount, 0)
+        // Replacement lot basis bumped from 85 to 105 (per-share disallowance = 20)
+        let replacement = lots.first { $0.openDate == d45 }!
+        XCTAssertEqual(replacement.costBasis, 105)
+        XCTAssertEqual(replacement.washSaleAdjustment, 20)
+    }
+
+    func testUSWashSalePartialReplacement() async {
+        // Sell 10 at $20 loss → -200 total loss. Replacement buy is only 4 shares.
+        // 4/10 of loss disallowed = -80. Remaining -120 stays.
+        let cal = Calendar(identifier: .gregorian)
+        let d0 = cal.date(from: DateComponents(year: 2024, month: 1, day: 1))!
+        let d10 = cal.date(byAdding: .day, value: 10, to: d0)!
+        let d20 = cal.date(byAdding: .day, value: 20, to: d0)!
+        let p = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let regime = USWashSale()
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("X"), side: .buy,
+                           quantity: 10, price: 100, commission: .usd(0),
+                           slippageBps: 0, filledAt: d0), taxRegime: regime)
+        let provisional = await p.apply(
+            Fill(orderId: UUID(), symbol: Symbol("X"), side: .sell,
+                 quantity: 10, price: 80, commission: .usd(0),
+                 slippageBps: 0, filledAt: d10), taxRegime: regime)
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("X"), side: .buy,
+                           quantity: 4, price: 85, commission: .usd(0),
+                           slippageBps: 0, filledAt: d20), taxRegime: regime)
+        let history = await p.lotHistory
+        let (adj, _) = regime.reconcileDisallowance(
+            dispositions: provisional, lotHistory: history)
+        XCTAssertEqual(adj[0].washSaleDisallowed?.amount, 80)
+        // Per-share disallowed = 20; 4 shares × 20 = 80
+    }
+
+    func testUSWashSaleOutsideWindowDoesNotDisallow() async {
+        let cal = Calendar(identifier: .gregorian)
+        let d0 = cal.date(from: DateComponents(year: 2024, month: 1, day: 1))!
+        let d30 = cal.date(byAdding: .day, value: 30, to: d0)!
+        let d100 = cal.date(byAdding: .day, value: 100, to: d0)!  // > 30 days after
+        let p = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let regime = USWashSale()
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("X"), side: .buy,
+                           quantity: 10, price: 100, commission: .usd(0),
+                           slippageBps: 0, filledAt: d0), taxRegime: regime)
+        let provisional = await p.apply(
+            Fill(orderId: UUID(), symbol: Symbol("X"), side: .sell,
+                 quantity: 10, price: 80, commission: .usd(0),
+                 slippageBps: 0, filledAt: d30), taxRegime: regime)
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("X"), side: .buy,
+                           quantity: 10, price: 85, commission: .usd(0),
+                           slippageBps: 0, filledAt: d100), taxRegime: regime)
+        let history = await p.lotHistory
+        let (adj, _) = regime.reconcileDisallowance(
+            dispositions: provisional, lotHistory: history)
+        XCTAssertNil(adj[0].washSaleDisallowed)
+    }
+
+    func testUSWashSaleGainNotAffected() async {
+        let cal = Calendar(identifier: .gregorian)
+        let d0 = cal.date(from: DateComponents(year: 2024, month: 1, day: 1))!
+        let d10 = cal.date(byAdding: .day, value: 10, to: d0)!
+        let d20 = cal.date(byAdding: .day, value: 20, to: d0)!
+        let p = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let regime = USWashSale()
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("X"), side: .buy,
+                           quantity: 10, price: 100, commission: .usd(0),
+                           slippageBps: 0, filledAt: d0), taxRegime: regime)
+        let provisional = await p.apply(
+            Fill(orderId: UUID(), symbol: Symbol("X"), side: .sell,
+                 quantity: 10, price: 120, commission: .usd(0),
+                 slippageBps: 0, filledAt: d10), taxRegime: regime)
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("X"), side: .buy,
+                           quantity: 10, price: 125, commission: .usd(0),
+                           slippageBps: 0, filledAt: d20), taxRegime: regime)
+        let history = await p.lotHistory
+        let (adj, _) = regime.reconcileDisallowance(
+            dispositions: provisional, lotHistory: history)
+        XCTAssertNil(adj[0].washSaleDisallowed)
+        XCTAssertEqual(adj[0].realizedPnL.amount, 200)
+    }
+
+    func testUSWashSaleAcrossYearBoundary() async {
+        // Loss in Dec 2024, replacement in Jan 2025 within 30 days
+        let cal = Calendar(identifier: .gregorian)
+        let buyDate = cal.date(from: DateComponents(year: 2024, month: 6, day: 1))!
+        let lossDate = cal.date(from: DateComponents(year: 2024, month: 12, day: 20))!
+        let replaceDate = cal.date(from: DateComponents(year: 2025, month: 1, day: 5))!
+        let p = Portfolio(baseCurrency: .usd, initialCash: .usd(10_000))
+        let regime = USWashSale()
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("X"), side: .buy,
+                           quantity: 10, price: 100, commission: .usd(0),
+                           slippageBps: 0, filledAt: buyDate), taxRegime: regime)
+        let provisional = await p.apply(
+            Fill(orderId: UUID(), symbol: Symbol("X"), side: .sell,
+                 quantity: 10, price: 80, commission: .usd(0),
+                 slippageBps: 0, filledAt: lossDate), taxRegime: regime)
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("X"), side: .buy,
+                           quantity: 10, price: 85, commission: .usd(0),
+                           slippageBps: 0, filledAt: replaceDate), taxRegime: regime)
+        let history = await p.lotHistory
+        let (adj, _) = regime.reconcileDisallowance(
+            dispositions: provisional, lotHistory: history)
+        XCTAssertEqual(adj[0].washSaleDisallowed?.amount, 200)
+    }
+
+    // MARK: - Canadian ACB regime
+
+    func testCanadianACBPoolsBasis() async {
+        // Buy 10 @ 100 then 10 @ 120 → pooled ACB = 110.
+        // Sell 5 → basis = 5 × 110 = 550.
+        let cal = Calendar(identifier: .gregorian)
+        let d0 = cal.date(from: DateComponents(year: 2024, month: 1, day: 1))!
+        let d10 = cal.date(byAdding: .day, value: 100, to: d0)!  // outside wash window
+        let d20 = cal.date(byAdding: .day, value: 200, to: d0)!
+        let p = Portfolio(baseCurrency: .cad, initialCash: .cad(10_000))
+        let regime = CanadianACB()
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("X"), side: .buy,
+                           quantity: 10, price: 100, commission: .cad(0),
+                           slippageBps: 0, filledAt: d0), taxRegime: regime)
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("X"), side: .buy,
+                           quantity: 10, price: 120, commission: .cad(0),
+                           slippageBps: 0, filledAt: d10), taxRegime: regime)
+        let dispositions = await p.apply(
+            Fill(orderId: UUID(), symbol: Symbol("X"), side: .sell,
+                 quantity: 5, price: 130, commission: .cad(0),
+                 slippageBps: 0, filledAt: d20), taxRegime: regime)
+        XCTAssertEqual(dispositions.count, 1)
+        XCTAssertEqual(dispositions[0].quantity, 5)
+        XCTAssertEqual(dispositions[0].costBasis.amount, 550)
+        XCTAssertEqual(dispositions[0].proceeds.amount, 650)
+        XCTAssertEqual(dispositions[0].realizedPnL.amount, 100)
+    }
+
+    func testCanadianSuperficialLossRuleDisallows() async {
+        // Same shape as US wash-sale test but using CanadianACB
+        let cal = Calendar(identifier: .gregorian)
+        let d0 = cal.date(from: DateComponents(year: 2024, month: 1, day: 1))!
+        let d30 = cal.date(byAdding: .day, value: 30, to: d0)!
+        let d45 = cal.date(byAdding: .day, value: 45, to: d0)!
+        let p = Portfolio(baseCurrency: .cad, initialCash: .cad(10_000))
+        let regime = CanadianACB()
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("X"), side: .buy,
+                           quantity: 10, price: 100, commission: .cad(0),
+                           slippageBps: 0, filledAt: d0), taxRegime: regime)
+        let provisional = await p.apply(
+            Fill(orderId: UUID(), symbol: Symbol("X"), side: .sell,
+                 quantity: 10, price: 80, commission: .cad(0),
+                 slippageBps: 0, filledAt: d30), taxRegime: regime)
+        await p.apply(Fill(orderId: UUID(), symbol: Symbol("X"), side: .buy,
+                           quantity: 10, price: 85, commission: .cad(0),
+                           slippageBps: 0, filledAt: d45), taxRegime: regime)
+        let history = await p.lotHistory
+        let (adj, lots) = regime.reconcileDisallowance(
+            dispositions: provisional, lotHistory: history)
+        XCTAssertEqual(adj[0].washSaleDisallowed?.amount, 200)
+        let replacement = lots.first { $0.openDate == d45 }!
+        XCTAssertEqual(replacement.costBasis, 105)
+    }
+}

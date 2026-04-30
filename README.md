@@ -6,15 +6,16 @@ Athena is an open-source Swift quant library. It works standalone.
 
 ## Status
 
-**v0.2 — correctness release.** Adds stop / stop-limit order fills and corporate-action handling (splits + cash dividends) on top of the v0.1 foundation: event-driven engine, core types, six indicators (SMA, EMA, RSI, MACD, Bollinger Bands, ATR), simulated broker with realistic commission/slippage models (Free, Fixed, PerShare, Questrade), and a CSV data source. CI enforces ≥ 90% line coverage on every push.
+**v0.3 — tax realism release.** Adds pluggable `TaxRegime` accounting (`CanadianACB` with the superficial-loss rule, `USWashSale` with FIFO + ST/LT classification + wash-sale rule), per-fill tax-lot tracking, per-disposition realized-P&L records, and per-year tax summaries. Builds on v0.2 (stop / stop-limit fills, splits, cash dividends) and the v0.1 foundation (event-driven engine, six indicators, simulated broker with realistic commission/slippage, CSV data source). Existing strategies that don't set `taxRegime` get the `NoTaxes` default and behave identically. CI enforces ≥ 90% line coverage on every push.
 
-Planned for v0.3+:
+Planned for v0.4+:
 
 - MLX-backed vectorized engine for parameter sweeps
 - IBKR Web API and Alpaca broker adapters
 - Spin-offs, stock dividends, DRIP reinvestment
 - Multi-currency portfolio with FX provider
-- Tax regimes (Canadian ACB, US wash-sale)
+- Specific-identification lot selection
+- Cross-currency tax reporting
 
 ## Quick start
 
@@ -36,6 +37,7 @@ swift run RSIMeanReversionExample
 swift run BollingerBreakoutExample
 swift run MACDSignalExample
 swift run ProtectiveStopExample
+swift run TaxAwareExample
 ```
 
 Each example prints initial/final equity, total return, max drawdown,

@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - TBD
+
+The "Tax Realism Release". Adds pluggable tax accounting via a
+`TaxRegime` protocol with two implementations: **Canadian ACB with the
+superficial-loss rule** and **US FIFO with the wash-sale rule and
+short-term/long-term classification**. Additive and back-compatible —
+existing v0.2 strategies that don't set `taxRegime` get the `NoTaxes`
+default and behave identically.
+
+### Added
+
+- **AthenaCore**: `TaxLot` (per-share basis with `washSaleAdjustment`),
+  `Disposition` (per-sale realized P&L with `holdingPeriod`,
+  `washSaleDisallowed`, and `taxableRealizedPnL`), `HoldingPeriod`
+  (`.shortTerm`/`.longTerm` with strict > 365-day classification),
+  `TaxYearSummary` (per-year per-currency aggregation with gross
+  gain/loss, ST/LT split, and washed amounts), `TaxRegime` protocol
+  with `dispose(fill:lots:)` and `reconcileDisallowance(...)` hooks,
+  `NoTaxes` default. `Portfolio` gains `lots` (live FIFO inventory) and
+  `lotHistory` (immutable audit log); both are populated on buy fills
+  and consumed/scaled by sells and splits — only when a tax regime is
+  set.
+- **AthenaCore (TaxRegimes)**: `CanadianACB` (pooled basis at sale time
+  per CRA convention + superficial-loss disallowance), `USWashSale`
+  (FIFO lot consumption + ST/LT classification + wash-sale
+  disallowance). Both regimes share a generic ±30-day reconciliation
+  helper.
+- **AthenaBrokers**: `SimulatedBroker.taxRegime` init parameter and
+  `recordedDispositions()` accessor; provisional dispositions are
+  recorded during the run and reconciled at end-of-backtest.
+- **AthenaBacktest**: `BacktestConfig.taxRegime`. `BacktestResult`
+  gains `dispositions: [Disposition]`, `taxYearSummaries:
+  [TaxYearSummary]`, and `finalLots: [TaxLot]` (all default-empty for
+  back-compat). Engine performs end-of-run reconciliation so
+  forward-looking 30-day rules can adjust earlier dispositions.
+- **TaxAwareExample**: demonstrates US wash-sale triggering with full
+  loss disallowance and replacement-lot basis adjustment.
+
+### Design notes
+
+- **Forward-looking reconciliation.** Wash-sale and superficial-loss
+  rules can't be settled at the time of sale because a replacement
+  purchase 20 days later would retroactively disallow the loss. The
+  broker records provisional dispositions; the engine asks the regime
+  to reconcile them once the run ends and the full ±30-day window has
+  materialized.
+- **Lot work is conditional.** When `taxRegime` is `NoTaxes`, the
+  Portfolio does zero lot work — v0.2 callers see no overhead and no
+  behavioral change.
+- **CanadianACB uses pooled basis** at the moment of sale (matching
+  CRA convention and the existing `Position.avgCost` field), but still
+  walks lots FIFO to attribute open-dates for reporting.
+- **A lot can't replace itself.** Reconciliation skips lots whose
+  `openDate` matches the disposition's `openDate` so the lot being
+  sold isn't mistakenly counted as its own replacement.
+
+### Known limitations
+
+- FIFO only; specific-identification deferred.
+- Tax events use the disposition currency; cross-currency reporting
+  (USD dispositions → CAD home currency) deferred to multi-currency
+  release.
+- Single-portfolio model — spousal-account ACB pooling out of scope.
+- Stock dividends, DRIP, and return-of-capital still deferred.
+
 ## [0.2.0] - TBD
 
 The "Correctness Release". Closes two known v0.1 limitations: stop/stop-limit

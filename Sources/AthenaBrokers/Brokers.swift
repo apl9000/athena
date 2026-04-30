@@ -136,17 +136,24 @@ public actor SimulatedBroker: Broker {
     private let portfolio: Portfolio
     private let commissionModel: CommissionModel
     private let slippageModel: SlippageModel
+    private let taxRegime: any TaxRegime
     private var pendingOrders: [Order] = []
+    private var dispositions: [Disposition] = []
 
     public init(
         portfolio: Portfolio,
         commissionModel: CommissionModel = FreeCommission(),
-        slippageModel: SlippageModel = FixedBpsSlippage(bps: 2)
+        slippageModel: SlippageModel = FixedBpsSlippage(bps: 2),
+        taxRegime: any TaxRegime = NoTaxes()
     ) {
         self.portfolio = portfolio
         self.commissionModel = commissionModel
         self.slippageModel = slippageModel
+        self.taxRegime = taxRegime
     }
+
+    /// Provisional dispositions recorded so far (pre-reconciliation).
+    public func recordedDispositions() -> [Disposition] { dispositions }
 
     public func submit(_ order: Order) async throws -> Order {
         pendingOrders.append(order)
@@ -268,7 +275,7 @@ public actor SimulatedBroker: Broker {
             slippageBps: slippageBps,
             filledAt: bar.timestamp
         )
-        await portfolio.apply(fill)
+        await portfolio.apply(fill, taxRegime: taxRegime).forEach { dispositions.append($0) }
         return fill
     }
 }

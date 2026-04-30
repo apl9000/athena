@@ -74,6 +74,14 @@ let package = Package(
             ],
             path: "Examples/ProtectiveStop"
         ),
+        .executableTarget(
+            name: "TaxAwareExample",
+            dependencies: [
+                "AthenaCore", "AthenaIndicators", "AthenaBrokers",
+                "AthenaData", "AthenaBacktest",
+            ],
+            path: "Examples/TaxAware"
+        ),
         .testTarget(name: "AthenaCoreTests", dependencies: ["AthenaCore"]),
         .testTarget(name: "AthenaIndicatorsTests", dependencies: ["AthenaIndicators", "AthenaCore"]),
         .testTarget(name: "AthenaBrokersTests", dependencies: ["AthenaBrokers", "AthenaCore"]),

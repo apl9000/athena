@@ -234,6 +234,10 @@ public actor Portfolio {
     public private(set) var positions: [Symbol: Position]
     public private(set) var fills: [Fill]
     public private(set) var history: [PortfolioSnapshot]
+    public private(set) var lots: [Symbol: [TaxLot]]
+    /// Chronological log of every lot ever opened (for end-of-run wash-sale reconciliation).
+    /// A separate copy is kept because `lots` shrinks as positions close.
+    public private(set) var lotHistory: [TaxLot]
 
     public init(baseCurrency: Currency = .cad, initialCash: Money) {
         precondition(
@@ -245,6 +249,8 @@ public actor Portfolio {
         self.positions = [:]
         self.fills = []
         self.history = []
+        self.lots = [:]
+        self.lotHistory = []
     }
 
     public func position(for symbol: Symbol) -> Position? {
@@ -256,7 +262,11 @@ public actor Portfolio {
     }
 
     /// Apply a fill: update cash, position quantity, and cost basis (ACB).
-    public func apply(_ fill: Fill) {
+    /// If a `taxRegime` is provided and the fill is a sell, lots are consumed
+    /// FIFO and the resulting dispositions are returned. For buys, a new lot
+    /// is opened. Returns an empty array for `NoTaxes` or buy fills.
+    @discardableResult
+    public func apply(_ fill: Fill, taxRegime: any TaxRegime = NoTaxes()) -> [Disposition] {
         let positionCurrency = positions[fill.symbol]?.currency ?? fill.commission.currency
         let notional = fill.quantity * fill.price
 
@@ -280,17 +290,51 @@ public actor Portfolio {
         pos.fills.append(fill)
         positions[fill.symbol] = pos
         fills.append(fill)
+
+        // Tax-lot leg
+        var dispositions: [Disposition] = []
+        if !(taxRegime is NoTaxes) {
+            if fill.side == .buy {
+                let lot = TaxLot(
+                    symbol: fill.symbol,
+                    openDate: fill.filledAt,
+                    quantity: fill.quantity,
+                    costBasis: fill.price
+                )
+                lots[fill.symbol, default: []].append(lot)
+                lotHistory.append(lot)
+            } else {
+                var symbolLots = lots[fill.symbol] ?? []
+                dispositions = taxRegime.dispose(fill: fill, lots: &symbolLots)
+                lots[fill.symbol] = symbolLots.filter { $0.quantity > 0 }
+            }
+        }
+        return dispositions
     }
 
     /// Apply a stock split to the held position. Total cost basis is preserved:
     /// shares are multiplied by `ratio`, per-share ACB is divided by `ratio`.
     /// No-op if the position is missing or zero. Cash is unaffected.
+    /// Tax lots are adjusted in parallel so wash-sale comparisons remain
+    /// in consistent post-split units.
     public func applySplit(symbol: Symbol, ratio: Decimal) {
         precondition(ratio > 0, "Split ratio must be positive")
         guard var pos = positions[symbol], pos.quantity != 0 else { return }
         pos.quantity = pos.quantity * ratio
         pos.avgCost = pos.avgCost / ratio
         positions[symbol] = pos
+
+        if var symbolLots = lots[symbol] {
+            for i in symbolLots.indices {
+                symbolLots[i].quantity = symbolLots[i].quantity * ratio
+                symbolLots[i].costBasis = symbolLots[i].costBasis / ratio
+                symbolLots[i].washSaleAdjustment = symbolLots[i].washSaleAdjustment / ratio
+            }
+            lots[symbol] = symbolLots
+        }
+        // Note: lotHistory is intentionally NOT mutated. It is the audit
+        // record of opens — reconciliation reads original opens, not the
+        // currently-held lot state.
     }
 
     /// Apply an ordinary cash dividend. Credits cash in the dividend's currency
