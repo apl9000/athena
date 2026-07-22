@@ -1,3 +1,16 @@
+# CI — Athena
+#
+# Runs swift build + swift test on every pull request and push to main.
+#
+# Platforms:
+#   macOS — full build + test with 90% line-coverage gate (xcrun llvm-cov).
+#   Linux — build + test only; xcrun is macOS-specific so coverage runs
+#           on macOS only.
+#
+# CD: none — Athena is an open-source library / backtest engine with no
+#     deploy target. Do NOT add speculative deploy steps here.
+#     See .github/workflows/release.yml for the tag-based GitHub Release.
+
 name: CI
 
 on:
@@ -10,6 +23,7 @@ env:
   COVERAGE_THRESHOLD: "90.0"
 
 jobs:
+  # ── macOS: build + test + 90% line-coverage gate ─────────────────────────
   build-test-coverage:
     name: Build, Test, Coverage Gate
     runs-on: macos-14
@@ -38,3 +52,22 @@ jobs:
           name: coverage-lcov
           path: coverage.lcov
           if-no-files-found: ignore
+
+  # ── Linux: build + test (no xcrun / coverage tooling) ────────────────────
+  build-test-linux:
+    name: Build & Test (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: swift:5.10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
