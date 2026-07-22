@@ -116,6 +116,19 @@ let package = Package(
             ],
             path: "Examples/ParameterSweep"
         ),
+        .executableTarget(
+            name: "MLXSweepExample",
+            dependencies: [
+                "AthenaCore",
+                "AthenaIndicators",
+                "AthenaBrokers",
+                "AthenaData",
+                "AthenaBacktest",
+                "AthenaSweep",
+                "AthenaMLX",
+            ],
+            path: "Examples/MLXSweep"
+        ),
 
         // MARK: - Tests
         .testTarget(name: "AthenaCoreTests", dependencies: ["AthenaCore"]),

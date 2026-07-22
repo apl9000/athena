@@ -6,11 +6,20 @@ Athena is an open-source Swift quant library. It works standalone.
 
 ## Status
 
-**v0.3 — tax realism release.** Adds pluggable `TaxRegime` accounting (`CanadianACB` with the superficial-loss rule, `USWashSale` with FIFO + ST/LT classification + wash-sale rule), per-fill tax-lot tracking, per-disposition realized-P&L records, and per-year tax summaries. Builds on v0.2 (stop / stop-limit fills, splits, cash dividends) and the v0.1 foundation (event-driven engine, six indicators, simulated broker with realistic commission/slippage, CSV data source). Existing strategies that don't set `taxRegime` get the `NoTaxes` default and behave identically. CI enforces ≥ 90% line coverage on every push.
+**v0.5 — MLX runner seam.** Adds the `AthenaMLX` module with `MLXBacktestRunner` — an alternative `BacktestRunner` that is the entry point for the MLX-backed vectorized fast path on Apple Silicon. In v0.5 slice 1 the runner delegates to `EventDrivenRunner` internally, so results are numerically identical and non-MLX platforms build cleanly. The `VectorizableStrategy` opt-in protocol is available for strategies that want to express their signal logic as a single vectorized pass; these strategies will take the real tensor fast path in later v0.5 slices. Switching from `EventDrivenRunner` to `MLXBacktestRunner` is a one-line change to `Sweep.init` — no strategy changes needed.
 
-Planned for v0.4+:
+Builds on v0.4 (`AthenaSweep` module with `Sweep`, `ParameterSpace`, `ParameterAxis`, `BacktestRunner`), v0.3 (pluggable `TaxRegime`, `CanadianACB`, `USWashSale`), v0.2 (stop / stop-limit fills, splits, cash dividends), and the v0.1 foundation (event-driven engine, six indicators, simulated broker, CSV data source). CI enforces ≥ 90% line coverage on every push.
 
-- MLX-backed vectorized engine for parameter sweeps
+### v0.5 scope and limitations
+
+- `MLXBacktestRunner` is available on all platforms. The MLX tensor fast path (later slices) requires Apple Silicon (macOS / iOS).
+- Fast-path eligibility (later slices): strategy must conform to `VectorizableStrategy` AND `BacktestConfig` must use `NoTaxes`. Non-qualifying strategies and tax-regime sweeps fall back to `EventDrivenRunner` per cell — transparently, with no API changes.
+- Vectorized indicators in v0.5: SMA, EMA, RSI, Bollinger Bands. MACD and ATR are not vectorized; strategies using them fall back automatically.
+- Long-only / flat positions only. Short positions, sized positions, and leverage are out of v0.5 scope.
+- Tax-regime sweeps (`CanadianACB`, `USWashSale`) always fall back to `EventDrivenRunner`; the vectorized path is for `NoTaxes` only.
+
+Planned for v0.6+:
+
 - IBKR Web API and Alpaca broker adapters
 - Spin-offs, stock dividends, DRIP reinvestment
 - Multi-currency portfolio with FX provider
@@ -38,11 +47,74 @@ swift run BollingerBreakoutExample
 swift run MACDSignalExample
 swift run ProtectiveStopExample
 swift run TaxAwareExample
+swift run ParameterSweepExample  # v0.4: parameter sweep with EventDrivenRunner
+swift run MLXSweepExample        # v0.5: same sweep with both runners side-by-side
 ```
 
 Each example prints initial/final equity, total return, max drawdown,
 annualized Sharpe, and fill count, so you can compare strategies side-by-side
 against the buy-and-hold baseline.
+
+## MLXBacktestRunner — adopting the v0.5 fast path
+
+`MLXBacktestRunner` is a drop-in replacement for `EventDrivenRunner`. The only
+required change is the `runner:` argument to `Sweep.init`:
+
+```swift
+import AthenaMLX
+
+// v0.4: event-driven (default)
+let sweep = Sweep(factory: factory, bars: bars, config: config, space: space)
+
+// v0.5: MLX runner seam — one-line swap, identical results in slice 1
+let sweep = Sweep(
+    factory: factory,
+    runner: MLXBacktestRunner(),  // ← only change
+    bars: bars,
+    config: config,
+    space: space
+)
+```
+
+**Platform gating.** `MLXBacktestRunner` is available on all platforms. The
+MLX tensor fast path (added in later v0.5 slices) requires Apple Silicon.
+On Intel macOS, Linux, and other non-Apple-Silicon platforms the runner
+falls back to `EventDrivenRunner` per cell — no build errors, no strategy
+changes, and results are identical.
+
+**Fallback behaviour.** In v0.5 slice 1 `MLXBacktestRunner` always delegates
+to `EventDrivenRunner`. Later slices add real tensor dispatch for cells that
+meet both conditions:
+1. The strategy conforms to `VectorizableStrategy`.
+2. The `BacktestConfig` uses `NoTaxes` (tax-regime sweeps always fall back).
+
+Cells that fail either condition are silently routed to `EventDrivenRunner`.
+Callers never need to detect or handle the dispatch themselves.
+
+**`VectorizableStrategy` opt-in.** Strategies that want to participate in
+the fast path implement `signals(for:)`:
+
+```swift
+struct SMACrossover: Strategy, VectorizableStrategy {
+    let fast: Int
+    let slow: Int
+
+    func onBar(_ bar: Bar, context: StrategyContext) async throws { ... }
+
+    // Called once per cell; returns a Bool array the same length as bars.
+    // true = long (fully in), false = flat (fully out).
+    // A false→true transition buys at the next bar's open; true→false sells.
+    // A transition on the final bar has no next open and is not filled.
+    func signals(for bars: [Bar]) -> [Bool] {
+        // compute vectorized SMA signals here
+        return bars.map { _ in true }  // placeholder
+    }
+}
+```
+
+**Vectorized indicators (v0.5).** SMA, EMA, RSI, and Bollinger Bands have
+vectorized implementations inside `AthenaMLX`. Strategies using only these
+four indicators are fast-path eligible. MACD and ATR fall back automatically.
 
 ## Development
 
@@ -64,10 +136,15 @@ make build      # swift build -c release
 
 ```
 AthenaCore         Types, Portfolio, Clock, Strategy + Broker/Indicator protocols
+                   + VectorizableStrategy (v0.5 opt-in for MLX fast path)
 AthenaIndicators   SMA, EMA, RSI, MACD, Bollinger Bands, ATR + IndicatorCache
 AthenaBrokers      Commission/slippage models, SimulatedBroker
 AthenaData         DataSource protocol, CSV reader
 AthenaBacktest     Event-driven engine, results, metrics
+AthenaSweep        Parallel parameter sweeps — BacktestRunner seam, Sweep,
+                   ParameterSpace, ParameterAxis, EventDrivenRunner (v0.4+)
+AthenaMLX          MLXBacktestRunner — fast-path entry point for Apple Silicon
+                   parameter sweeps; falls back to EventDrivenRunner (v0.5+)
 ```
 
 Each module is a separate library product so downstream code imports only what it needs.

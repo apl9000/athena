@@ -7,6 +7,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - TBD
+
+The "MLX runner seam release". Adds the `AthenaMLX` module with
+`MLXBacktestRunner` — a `BacktestRunner` that is the entry point for
+the MLX-backed vectorized fast path on Apple Silicon. In v0.5 slice 1
+the runner delegates to `EventDrivenRunner` internally, so results are
+numerically identical and the seam builds on every platform. The
+`VectorizableStrategy` opt-in protocol is available for strategies that
+can express their signal logic as a single vectorized pass.
+
+### Added
+
+- **AthenaCore**: `VectorizableStrategy` — opt-in protocol for strategies
+  that can provide a `signals(for:) -> [Bool]` method. `true` = long
+  (fully in); `false` = flat (fully out). Conforming strategies are
+  eligible for the `MLXBacktestRunner` fast path when `BacktestConfig`
+  also uses `NoTaxes`. The `Strategy` event methods remain fully
+  available; `VectorizableStrategy` only adds `signals(for:)`.
+- **AthenaMLX**: New library product. `MLXBacktestRunner` conforming
+  to `BacktestRunner` — a drop-in replacement for `EventDrivenRunner`
+  in any `Sweep.init(runner:)` call. Slice 1 delegates internally to
+  `EventDrivenRunner`; later slices add real MLX tensor dispatch for
+  `VectorizableStrategy + NoTaxes` cells on Apple Silicon.
+- **MLXSweepExample**: Worked example demonstrating the one-line runner
+  swap. Runs the same MA-crossover grid sweep twice — once with
+  `EventDrivenRunner` and once with `MLXBacktestRunner` — printing
+  timing and result tables so users can observe result equivalence on
+  their own hardware.
+
+### Design notes
+
+- **One-line swap.** Adopting `MLXBacktestRunner` requires only changing
+  the `runner:` argument to `Sweep.init`. No strategy changes, no
+  conditional compilation, no platform guards in user code.
+- **Transparent fallback.** Cells that are not fast-path eligible
+  (non-`VectorizableStrategy` or non-`NoTaxes`) are silently routed to
+  `EventDrivenRunner` per cell. The caller never needs to detect or
+  handle the dispatch.
+- **Platform gating.** `MLXBacktestRunner` is available on all platforms.
+  The tensor fast path (later slices) requires Apple Silicon. Non-MLX
+  platforms (Intel macOS, Linux) fall back to `EventDrivenRunner` with
+  identical results and no build errors.
+- **Tax-regime sweeps fall back.** `CanadianACB` and `USWashSale` sweeps
+  always use `EventDrivenRunner` per cell; the vectorized path is for
+  `NoTaxes` only and does not support retroactive reconciliation.
+
+### Known limitations
+
+- MLX tensor dispatch is not yet implemented (slice 1 delegates).
+  Real vectorized performance requires later v0.5 slices.
+- Long-only / flat positions only. Short positions, leverage, and sized
+  positions are out of v0.5 scope.
+- Vectorized indicator coverage: SMA, EMA, RSI, Bollinger Bands only.
+  MACD and ATR fall back to the event-driven path automatically.
+- Multi-symbol strategies are not fast-path eligible in v0.5.
+- Walk-forward helpers and benchmark harnesses are out of v0.5 scope.
+
+## [0.4.0] - TBD
+
+The "parameter sweep release". Adds `AthenaSweep` — parallel parameter
+sweeps over a grid or random sample of strategy configurations.
+
+### Added
+
+- **AthenaSweep**: `BacktestRunner` protocol (abstraction over running
+  one strategy over one set of bars), `EventDrivenRunner` (default
+  implementation wrapping `BacktestEngine`), `StrategyFactory` protocol
+  + `ClosureStrategyFactory`, `ParameterSet` (a single point in
+  parameter space), `AnySendableValue` (type-erased Sendable value),
+  `ParameterAxis` (one named axis with discrete values),
+  `ParameterSpace` (enumerated `ParameterSet`s — `.grid()` for
+  Cartesian products, `.random()` for seeded random sampling),
+  `Sweep` (parallel execution bounded by `concurrency`), `SweepResult`,
+  `SweepError`.
+- **ParameterSweepExample**: Demonstrates a 3×3 MA-crossover grid sweep
+  on 1 000 synthetic daily bars, printing a return/drawdown/Sharpe/fills
+  table and highlighting the best Sharpe combination.
+- **AthenaSweepTests**: `ParameterSpaceTests` (grid, random, empty-axis
+  edge cases) and `SweepTests` (concurrency, ordering, failure isolation).
+
+### Design notes
+
+- **Concurrency-bounded.** `Sweep` dispatches one backtest per
+  `ParameterSet` using a task-group semaphore capped at
+  `ProcessInfo.activeProcessorCount` to prevent memory thrashing on
+  large grids.
+- **Order-preserving.** `Sweep.run()` returns results in the same order
+  as `space.sets` regardless of completion order.
+- **Failure-isolated.** Per-cell errors land in `SweepResult.Outcome.failure`
+  without aborting the rest of the sweep.
+
 ## [0.3.0] - TBD
 
 The "Tax Realism Release". Adds pluggable tax accounting via a
