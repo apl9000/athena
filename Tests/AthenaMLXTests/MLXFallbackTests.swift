@@ -58,8 +58,12 @@ private struct VectorizableBuyFirstBarStrategy: Strategy, VectorizableStrategy {
         _ = try? await context.buy(symbol, quantity: qty)
     }
 
-    /// Signal: long after the first bar (matches the `onBar` buy semantics
-    /// for fast-path comparison once real MLX dispatch lands).
+    /// Signal: flat on bar 0, long from bar 1 onward.
+    ///
+    /// The `false → true` transition at index 0→1 triggers a buy at bar 1's
+    /// open (per the `VectorizableStrategy` contract: "a change triggers a fill
+    /// at the **next** bar's open"). This matches `onBar` semantics above, which
+    /// places an order on bar 0 that fills at bar 1's open.
     func signals(for bars: [Bar]) -> [Bool] {
         bars.enumerated().map { (i, _) in i > 0 }
     }
