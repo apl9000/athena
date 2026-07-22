@@ -288,6 +288,29 @@ final class VectorizedRSIParityTests: XCTestCase {
         }
     }
 
+    // MARK: Monotonically falling series
+
+    /// RSI on a strictly falling series equals 0 (all losses, no gains) and
+    /// matches the scalar implementation element-by-element.
+    ///
+    /// This exercises the downtrend path where `avgGain == 0`, driving
+    /// `rs == 0` and clamping RSI to 0 — a case the alternating series never
+    /// reaches because alternating inputs always produce non-zero gains.
+    func test_rsi_fallingSeries_matchesScalar() {
+        let period = 14
+        let closes = (1...30).reversed().map { Decimal($0) }
+        let vec    = VectorizedRSI(period: period).compute(closes: closes)
+        let scalar = scalarRSIValues(period: period, closes: closes)
+
+        XCTAssertEqual(vec.count, closes.count)
+        for (i, (v, s)) in zip(vec, scalar).enumerated() {
+            guard let v, let s else { continue }
+            // RSI uses pure Decimal arithmetic — enforce exact equality.
+            XCTAssertEqual(v, s,
+                           "RSI mismatch at bar \(i) on falling series: vec=\(v) scalar=\(s)")
+        }
+    }
+
     // MARK: Length contract
 
     /// Output length always equals input length.
