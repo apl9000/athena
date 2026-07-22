@@ -46,10 +46,12 @@ public struct MLXBacktestRunner: BacktestRunner {
         bars: [Bar],
         config: BacktestConfig
     ) async throws -> BacktestResult {
-        // Fast path: VectorizableStrategy + NoTaxes regime.
+        // Fast path: VectorizableStrategy + NoTaxes + NoCorporateActions + single symbol.
         if let vs = strategy as? any VectorizableStrategy,
-           config.taxRegime is NoTaxes {
-            return vectorizedRun(strategy: vs, bars: bars, config: config)
+           config.taxRegime is NoTaxes,
+           config.corporateActions is NoCorporateActions,
+           Set(bars.map(\.symbol)).count <= 1 {
+            return try vectorizedRun(strategy: vs, bars: bars, config: config)
         }
         // Fallback: full event-driven engine.
         // Issue #114 will add explicit tests and documentation for the
@@ -74,7 +76,7 @@ public struct MLXBacktestRunner: BacktestRunner {
         strategy: any VectorizableStrategy,
         bars: [Bar],
         config: BacktestConfig
-    ) -> BacktestResult {
+    ) throws -> BacktestResult {
         // Filter and sort — same semantics as BacktestEngine.
         let filteredBars = bars
             .filter { $0.timestamp >= config.startDate && $0.timestamp <= config.endDate }
@@ -87,14 +89,10 @@ public struct MLXBacktestRunner: BacktestRunner {
         // Obtain signals (must match filteredBars.count by VectorizableStrategy contract).
         let signals = strategy.signals(for: filteredBars)
 
-        // Guard against a mismatch — surface it as a BacktestResult with
-        // initialEquity == finalEquity so callers can detect it without crashing.
+        // Contract violation: signal count must match bar count.
         guard signals.count == filteredBars.count else {
-            return BacktestResult(
-                initialEquity: config.initialCash,
-                finalEquity: config.initialCash,
-                snapshots: [],
-                fills: []
+            throw VectorizedFillSimulatorError.signalCountMismatch(
+                signalCount: signals.count, barCount: filteredBars.count
             )
         }
 

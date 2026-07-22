@@ -25,6 +25,17 @@ import AthenaBacktest
 // - Whole-share quantities only.
 // - Commission currency is assumed to match the base (initialCash) currency.
 
+enum VectorizedFillSimulatorError: Error, LocalizedError {
+    case signalCountMismatch(signalCount: Int, barCount: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .signalCountMismatch(let signalCount, let barCount):
+            return "VectorizedFillSimulator: signals.count (\(signalCount)) != bars.count (\(barCount))"
+        }
+    }
+}
+
 struct VectorizedFillSimulator {
 
     // MARK: - Public result type
@@ -93,6 +104,7 @@ struct VectorizedFillSimulator {
                             currency: currency
                         ) {
                             fills.append(fill)
+                            executedSignal = pendingSignal
                         }
                     } else {
                         // true → false: exit to flat
@@ -103,9 +115,9 @@ struct VectorizedFillSimulator {
                             currency: currency
                         ) {
                             fills.append(fill)
+                            executedSignal = pendingSignal
                         }
                     }
-                    executedSignal = pendingSignal
                 }
             }
 
@@ -189,7 +201,7 @@ struct VectorizedFillSimulator {
             : 0
 
         return Fill(
-            orderId: UUID(),
+            orderId: finalOrder.id,
             symbol: symbol,
             side: .buy,
             quantity: qty,
@@ -227,7 +239,7 @@ struct VectorizedFillSimulator {
             : 0
 
         return Fill(
-            orderId: UUID(),
+            orderId: sellOrder.id,
             symbol: symbol,
             side: .sell,
             quantity: qty,

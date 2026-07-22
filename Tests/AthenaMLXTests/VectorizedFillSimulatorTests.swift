@@ -231,36 +231,9 @@ final class VectorizedFillSimulatorEquityTests: XCTestCase {
             commission: FreeCommission(currency: .usd),
             slippage: NoSlippage()
         )
-        // signals[0]=F, signals[1]=T → buy at bar[1].open=100 → 100 shares
-        // signals[2]=F → sell at bar[2+1=3].open... wait let me recheck
-        // Actually: signals[1]=true (transition from false to true) → buy at bar[1+1=2].open
-        // Wait, I need to re-check the logic.
-        //
-        // The transition happens BETWEEN consecutive signals.
-        // signals = [F, T, F, F]
-        // Transition 1: signals[0]=F → signals[1]=T: fill at bar[1].open? No...
-        //
-        // Per the contract: "A transition from false→true triggers a buy at the NEXT bar's open"
-        // signals[i] = desired position after bar i
-        // So signals[0]=F after bar 0, signals[1]=T after bar 1:
-        //   transition signals[0]→signals[1]: fills at bar[1+1=2]? No...
-        //
-        // Actually reading VectorizableStrategy more carefully:
-        // signals[i] = target after bar[i].close (i.e., based on seeing bar[i])
-        // The "next bar's open" = bar[i+1].open
-        //
-        // But my algorithm uses:
-        // At bar[i]: check signals[i-1] vs executedPosition → fill at bar[i].open
-        // = transition from signals[i-1] fills at bar[i].open
-        //
-        // So:
-        // signals = [F, T, F, F]
-        // bar[0]: i=0, no prev signal, skip
-        // bar[1]: i=1, check signals[0]=F vs executed=F → no transition
-        // bar[2]: i=2, check signals[1]=T vs executed=F → BUY at bar[2].open
-        // bar[3]: i=3, check signals[2]=F vs executed=T → SELL at bar[3].open
-        //
-        // So: buy at bar[2].open=100, sell at bar[3].open=100
+        // signals = [F, T, F, F]:
+        // bar[2]: signals[1]=T vs executed=F → BUY at bar[2].open=100
+        // bar[3]: signals[2]=F vs executed=T → SELL at bar[3].open=100
         XCTAssertEqual(result.fills.count, 2)
         let buyFill = result.fills.first(where: { $0.side == .buy })!
         let sellFill = result.fills.first(where: { $0.side == .sell })!
@@ -293,23 +266,11 @@ final class VectorizedFillSimulatorEquityTests: XCTestCase {
     /// open=100, fillPrice = 100 * (1 - 10/10_000) = 99.9
     func test_slippageReflectedInSellFillPrice() {
         let sym = Symbol("T")
-        // signals = [T, F, F] → buy at bar[1].open=100, sell at bar[2].open... wait
-        // signals = [F, T, F] → buy at bar[1], sell at bar[2]
-        // Actually:
-        // bar[0]: no prev, skip
-        // bar[1]: signals[0]=F vs executed=F → no fill
-        // bar[2]: signals[1]=T vs executed=F → BUY at bar[2].open=100
-        // end: signals[2]=F but it's the last; need sell at bar[3]?
-        // Hmm, signals=[F,T,F] with 3 bars:
-        // bar[2]: signals[1]=T → BUY at bar[2].open
-        // No bar[3] to execute signals[2]=F
-        // So only 1 fill (buy). Need 4 bars.
-        let bars = makeBars(4, symbol: sym, opens: [100, 100, 100, 100])
-        let signals = [false, true, false, false]
-        // bar[0]: skip
-        // bar[1]: signals[0]=F → no fill
+        // signals = [F, T, F, F] with 4 bars:
         // bar[2]: signals[1]=T → BUY at bar[2].open=100
         // bar[3]: signals[2]=F → SELL at bar[3].open=100
+        let bars = makeBars(4, symbol: sym, opens: [100, 100, 100, 100])
+        let signals = [false, true, false, false]
         let result = VectorizedFillSimulator().simulate(
             symbol: sym,
             signals: signals,
