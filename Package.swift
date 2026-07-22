@@ -162,7 +162,7 @@ let package = Package(
             name: "AthenaMLXTests",
             dependencies: [
                 "AthenaMLX", "AthenaSweep", "AthenaCore",
-                "AthenaBacktest",
+                "AthenaBacktest", "AthenaIndicators",
             ]
         ),
     ]
