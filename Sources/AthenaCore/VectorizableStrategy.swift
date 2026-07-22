@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - VectorizableStrategy
 
 /// An opt-in protocol for strategies that can express their signal logic
@@ -19,6 +17,10 @@ import Foundation
 /// - Each element is `true` (long — fully in) or `false` (flat — fully out).
 /// - A transition from `false → true` triggers a **buy at the next bar's open**.
 /// - A transition from `true → false` triggers a **sell at the next bar's open**.
+/// - A transition signalled on the **final bar** has no next open and is
+///   therefore **not filled** — the position is left unchanged for the
+///   remainder of the run. Any open position is marked-to-market at the
+///   final bar's close but never liquidated by an implicit trade.
 /// - The ``Strategy`` methods (``onStart``, ``onBar``, ``onFinish``) remain
 ///   fully available for event-driven use; `VectorizableStrategy` only adds
 ///   the `signals(for:)` method.
@@ -43,6 +45,7 @@ public protocol VectorizableStrategy: Strategy {
     ///   is the same `bars` that was passed to the ``Sweep``.
     /// - Returns: A `Bool` array whose length equals `bars.count`. `true`
     ///   means "long"; `false` means "flat". A change between adjacent
-    ///   elements triggers a fill at the **next** bar's open.
+    ///   elements triggers a fill at the **next** bar's open. A change
+    ///   signalled on the final bar has no next open and is not filled.
     func signals(for bars: [Bar]) -> [Bool]
 }

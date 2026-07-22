@@ -84,7 +84,8 @@ final class MLXRunnerConformanceTests: XCTestCase {
     /// This verifies the seam contract is fully satisfied.
     func test_mlxRunner_conformsToBacktestRunnerProtocol() {
         let runner: any BacktestRunner = MLXBacktestRunner()
-        XCTAssertNotNil(runner)
+        XCTAssertTrue(runner is MLXBacktestRunner,
+                      "Existential must preserve the concrete MLXBacktestRunner type")
     }
 
     /// `MLXBacktestRunner` can be passed to `Sweep.init(runner:)`.
@@ -120,6 +121,7 @@ final class MLXRunnerConformanceTests: XCTestCase {
 final class MLXRunnerSingleCellTests: XCTestCase {
 
     /// A bare `run(strategy:bars:config:)` call returns a valid result.
+    /// `NopStrategy` trades nothing, so the run must produce zero fills.
     func test_singleRun_returnsBacktestResult() async throws {
         let bars = makeBars(5)
         let config = makeConfig(bars: bars)
@@ -128,7 +130,8 @@ final class MLXRunnerSingleCellTests: XCTestCase {
             bars: bars,
             config: config
         )
-        XCTAssertNotNil(result)
+        XCTAssertTrue(result.fills.isEmpty,
+                      "NopStrategy must produce zero fills")
     }
 
     /// The result's initial equity matches the config's `initialCash`.
@@ -144,7 +147,8 @@ final class MLXRunnerSingleCellTests: XCTestCase {
                        "Initial equity must match the config's initialCash")
     }
 
-    /// Running with empty bars returns a result without crashing.
+    /// Running with empty bars returns an empty-shaped result without crashing:
+    /// no snapshots, no fills, and equity unchanged from the initial cash.
     func test_singleRun_handlesEmptyBars() async throws {
         let config = BacktestConfig(
             startDate: Date(timeIntervalSince1970: 0),
@@ -156,7 +160,10 @@ final class MLXRunnerSingleCellTests: XCTestCase {
             bars: [],
             config: config
         )
-        XCTAssertNotNil(result)
+        XCTAssertTrue(result.snapshots.isEmpty, "Empty bars must produce no snapshots")
+        XCTAssertTrue(result.fills.isEmpty, "Empty bars must produce no fills")
+        XCTAssertEqual(result.finalEquity, config.initialCash,
+                       "Equity must stay at the initial cash level for an empty run")
     }
 }
 
@@ -244,13 +251,17 @@ final class VectorizableStrategyTests: XCTestCase {
     /// A type conforming to `VectorizableStrategy` also satisfies `Strategy`.
     func test_vectorizableStrategy_conformingTypeAlsoConformsToStrategy() {
         let strategy: any Strategy = AlwaysLongStrategy(symbol: Symbol("T"))
-        XCTAssertNotNil(strategy)
+        XCTAssertTrue(strategy is any VectorizableStrategy,
+                      "Upcast to Strategy must preserve VectorizableStrategy conformance")
     }
 
-    /// A `VectorizableStrategy` can be stored as `any VectorizableStrategy`.
+    /// A `VectorizableStrategy` can be stored as `any VectorizableStrategy`
+    /// and its `signals(for:)` dispatches correctly through the existential.
     func test_vectorizableStrategy_canBeStoredAsProtocolExistential() {
         let strategy: any VectorizableStrategy = AlwaysLongStrategy(symbol: Symbol("T"))
-        XCTAssertNotNil(strategy)
+        let bars = makeBars(4)
+        XCTAssertEqual(strategy.signals(for: bars), [true, true, true, true],
+                       "signals(for:) must dispatch through the existential")
     }
 
     /// `signals(for:)` returns an array of the same length as the bar input.
