@@ -8,8 +8,9 @@ import AthenaCore
 // for MLXBacktestRunner and must not appear in Athena's public API.
 //
 // v0.5 coverage: SMA, EMA, RSI (Wilder), BollingerBands.
-// Each type's `compute(closes:)` method matches the scalar counterpart in
-// AthenaIndicators within a documented floating-point tolerance of 1e-9.
+// Parity tolerance by type:
+//   SMA, EMA, RSI — exact (pure Decimal arithmetic, no rounding).
+//   BollingerBands — ≤ 1e-9 (sqrt step converts to Double and back).
 //
 // Later slices will replace the inner loops with MLX tensor operations when
 // `canImport(MLX)` is true; the public surface and test assertions are
@@ -61,9 +62,9 @@ struct VectorizedSMA {
 /// Computes Exponential Moving Average over a full close-price array.
 ///
 /// ## Seeding
-/// Seeds with the SMA of the first `period` closes, then applies Wilder's
-/// multiplier `α = 2 / (period + 1)` for every subsequent bar — identical
-/// to `AthenaIndicators.EMA`.
+/// Seeds with the SMA of the first `period` closes, then applies the
+/// standard EMA smoothing factor `α = 2 / (period + 1)` for every
+/// subsequent bar — identical to `AthenaIndicators.EMA`.
 ///
 /// ## Parity tolerance
 /// Exact (`Decimal` arithmetic, no rounding).
@@ -199,24 +200,26 @@ struct VectorizedBollingerBands {
         var result = [(upper: Decimal, middle: Decimal, lower: Decimal)?](
             repeating: nil, count: closes.count
         )
-        var windowSum: Decimal = 0
+        // Rolling sums maintained in O(1) per bar.
+        var windowSum:   Decimal = 0
+        var windowSumSq: Decimal = 0
 
         for i in closes.indices {
-            windowSum += closes[i]
+            let c = closes[i]
+            windowSum   += c
+            windowSumSq += c * c
             if i >= period {
-                windowSum -= closes[i - period]
+                let old = closes[i - period]
+                windowSum   -= old
+                windowSumSq -= old * old
             }
             guard i >= period - 1 else { continue }
 
-            let windowStart = i - period + 1
             let mean = windowSum / Decimal(period)
-
-            var variance: Decimal = 0
-            for j in windowStart...i {
-                let diff = closes[j] - mean
-                variance += diff * diff
-            }
-            variance /= Decimal(period)
+            // Population variance via the computational formula: E[X²] − (E[X])²
+            // Equivalent to the two-pass sum-of-squared-deviations formula with
+            // exact Decimal arithmetic; used here to keep the loop O(n) total.
+            let variance = windowSumSq / Decimal(period) - mean * mean
 
             let sd   = decimalSqrt(variance)
             let band = sd * stddev

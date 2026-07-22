@@ -5,11 +5,11 @@ import AthenaCore
 
 // MARK: - Shared test helpers
 
-/// Floating-point tolerance for parity assertions.
+/// Floating-point tolerance for BollingerBands parity assertions.
 ///
-/// `Decimal` arithmetic is exact for SMA, EMA, and RSI.  BollingerBands
-/// computes `sqrt` via `Double` internally, so a small tolerance is needed
-/// there.  We document a single constant used throughout.
+/// SMA, EMA, and RSI use pure `Decimal` arithmetic and are compared with
+/// exact `Decimal` equality.  BollingerBands computes `sqrt` via `Double`
+/// internally, so a small tolerance is needed there.
 private let parityTolerance: Double = 1e-9
 
 /// Build a fake `Bar` whose `close` (and open/high/low) equal `value`.
@@ -90,9 +90,8 @@ final class VectorizedSMAParityTests: XCTestCase {
                 XCTAssertNil(s,    "scalar[\(i)] should be nil when vec is nil")
                 continue
             }
-            let vd = NSDecimalNumber(decimal: v).doubleValue
-            let sd = NSDecimalNumber(decimal: s).doubleValue
-            XCTAssertEqual(vd, sd, accuracy: parityTolerance,
+            // SMA uses pure Decimal arithmetic — enforce exact equality.
+            XCTAssertEqual(v, s,
                            "SMA mismatch at bar \(i): vec=\(v) scalar=\(s)")
         }
     }
@@ -181,9 +180,8 @@ final class VectorizedEMAParityTests: XCTestCase {
 
         for (i, (v, s)) in zip(vec, scalar).enumerated() {
             guard let v, let s else { continue }
-            let vd = NSDecimalNumber(decimal: v).doubleValue
-            let sd = NSDecimalNumber(decimal: s).doubleValue
-            XCTAssertEqual(vd, sd, accuracy: parityTolerance,
+            // EMA uses pure Decimal arithmetic — enforce exact equality.
+            XCTAssertEqual(v, s,
                            "EMA mismatch at bar \(i): vec=\(v) scalar=\(s)")
         }
     }
@@ -199,11 +197,9 @@ final class VectorizedEMAParityTests: XCTestCase {
         let scalar = scalarEMAValues(period: period, closes: closes)
 
         // After 50 bars at 200, both should be very close to 200.
+        // EMA uses pure Decimal arithmetic — enforce exact equality.
         if let last = vec.last, let lv = last, let ls = scalar.last, let lsv = ls {
-            let vd = NSDecimalNumber(decimal: lv).doubleValue
-            let sd = NSDecimalNumber(decimal: lsv).doubleValue
-            XCTAssertEqual(vd, sd, accuracy: parityTolerance,
-                           "EMA convergence values must match")
+            XCTAssertEqual(lv, lsv, "EMA convergence values must match exactly")
         }
     }
 
@@ -254,10 +250,8 @@ final class VectorizedRSIParityTests: XCTestCase {
 
         for (i, (v, s)) in zip(vec, scalar).enumerated() {
             guard let v, let s else { continue }
-            let vd = NSDecimalNumber(decimal: v).doubleValue
-            let sd = NSDecimalNumber(decimal: s).doubleValue
-            XCTAssertEqual(vd, sd, accuracy: parityTolerance,
-                           "RSI mismatch at bar \(i)")
+            // RSI uses pure Decimal arithmetic — enforce exact equality.
+            XCTAssertEqual(v, s, "RSI mismatch at bar \(i)")
         }
     }
 
@@ -272,10 +266,8 @@ final class VectorizedRSIParityTests: XCTestCase {
 
         for (i, (v, s)) in zip(vec, scalar).enumerated() {
             guard let v, let s else { continue }
-            let vd = NSDecimalNumber(decimal: v).doubleValue
-            let sd = NSDecimalNumber(decimal: s).doubleValue
-            XCTAssertEqual(vd, sd, accuracy: parityTolerance,
-                           "RSI mismatch at bar \(i) on flat series")
+            // RSI uses pure Decimal arithmetic — enforce exact equality.
+            XCTAssertEqual(v, s, "RSI mismatch at bar \(i) on flat series")
         }
     }
 
@@ -291,10 +283,8 @@ final class VectorizedRSIParityTests: XCTestCase {
 
         for (i, (v, s)) in zip(vec, scalar).enumerated() {
             guard let v, let s else { continue }
-            let vd = NSDecimalNumber(decimal: v).doubleValue
-            let sd = NSDecimalNumber(decimal: s).doubleValue
-            XCTAssertEqual(vd, sd, accuracy: parityTolerance,
-                           "RSI mismatch at bar \(i) on alternating series")
+            // RSI uses pure Decimal arithmetic — enforce exact equality.
+            XCTAssertEqual(v, s, "RSI mismatch at bar \(i) on alternating series")
         }
     }
 
