@@ -35,13 +35,14 @@ let package = Package(
 
         // MARK: - MLX runner module (v0.5)
         //
-        // Slice 1: seam only — delegates to EventDrivenRunner internally.
+        // Slice 2+: VectorizedFillSimulator imports AthenaBrokers directly
+        // to access CommissionModel and SlippageModel.
         // Later slices add mlx-swift as a conditional macOS/iOS dependency
-        // and replace the delegation with real tensor dispatch behind
+        // and replace the inner loops with real tensor dispatch behind
         // `#if canImport(MLX)` guards.
         .target(
             name: "AthenaMLX",
-            dependencies: ["AthenaCore", "AthenaBacktest", "AthenaSweep"]
+            dependencies: ["AthenaCore", "AthenaBrokers", "AthenaBacktest", "AthenaSweep"]
         ),
 
         // MARK: - Examples
@@ -149,7 +150,7 @@ let package = Package(
             name: "AthenaMLXTests",
             dependencies: [
                 "AthenaMLX", "AthenaSweep", "AthenaCore",
-                "AthenaBacktest", "AthenaIndicators",
+                "AthenaBrokers", "AthenaBacktest", "AthenaIndicators",
             ]
         ),
     ]
