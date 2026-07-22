@@ -13,8 +13,11 @@ let package = Package(
         .library(name: "AthenaBrokers", targets: ["AthenaBrokers"]),
         .library(name: "AthenaData", targets: ["AthenaData"]),
         .library(name: "AthenaBacktest", targets: ["AthenaBacktest"]),
+        .library(name: "AthenaSweep", targets: ["AthenaSweep"]),
+        .library(name: "AthenaMLX", targets: ["AthenaMLX"]),
     ],
     targets: [
+        // MARK: - Core modules
         .target(name: "AthenaCore"),
         .target(name: "AthenaIndicators", dependencies: ["AthenaCore"]),
         .target(name: "AthenaBrokers", dependencies: ["AthenaCore"]),
@@ -23,6 +26,25 @@ let package = Package(
             name: "AthenaBacktest",
             dependencies: ["AthenaCore", "AthenaIndicators", "AthenaBrokers", "AthenaData"]
         ),
+
+        // MARK: - Sweep module (v0.4)
+        .target(
+            name: "AthenaSweep",
+            dependencies: ["AthenaCore", "AthenaBacktest"]
+        ),
+
+        // MARK: - MLX runner module (v0.5)
+        //
+        // Slice 1: seam only — delegates to EventDrivenRunner internally.
+        // Later slices add mlx-swift as a conditional macOS/iOS dependency
+        // and replace the delegation with real tensor dispatch behind
+        // `#if canImport(MLX)` guards.
+        .target(
+            name: "AthenaMLX",
+            dependencies: ["AthenaCore", "AthenaBacktest", "AthenaSweep"]
+        ),
+
+        // MARK: - Examples
         .executableTarget(
             name: "MACrossoverExample",
             dependencies: [
@@ -82,10 +104,53 @@ let package = Package(
             ],
             path: "Examples/TaxAware"
         ),
+        .executableTarget(
+            name: "ParameterSweepExample",
+            dependencies: [
+                "AthenaCore",
+                "AthenaIndicators",
+                "AthenaBrokers",
+                "AthenaData",
+                "AthenaBacktest",
+                "AthenaSweep",
+            ],
+            path: "Examples/ParameterSweep"
+        ),
+
+        // MARK: - Tests
         .testTarget(name: "AthenaCoreTests", dependencies: ["AthenaCore"]),
-        .testTarget(name: "AthenaIndicatorsTests", dependencies: ["AthenaIndicators", "AthenaCore"]),
-        .testTarget(name: "AthenaBrokersTests", dependencies: ["AthenaBrokers", "AthenaCore"]),
-        .testTarget(name: "AthenaDataTests", dependencies: ["AthenaData", "AthenaCore"]),
-        .testTarget(name: "AthenaBacktestTests", dependencies: ["AthenaBacktest", "AthenaCore", "AthenaIndicators", "AthenaBrokers", "AthenaData"]),
+        .testTarget(
+            name: "AthenaIndicatorsTests",
+            dependencies: ["AthenaIndicators", "AthenaCore"]
+        ),
+        .testTarget(
+            name: "AthenaBrokersTests",
+            dependencies: ["AthenaBrokers", "AthenaCore"]
+        ),
+        .testTarget(
+            name: "AthenaDataTests",
+            dependencies: ["AthenaData", "AthenaCore"]
+        ),
+        .testTarget(
+            name: "AthenaBacktestTests",
+            dependencies: [
+                "AthenaBacktest", "AthenaCore", "AthenaIndicators",
+                "AthenaBrokers", "AthenaData",
+            ]
+        ),
+        .testTarget(
+            name: "AthenaSweepTests",
+            dependencies: [
+                "AthenaSweep", "AthenaCore", "AthenaIndicators",
+                "AthenaBrokers", "AthenaData", "AthenaBacktest",
+            ]
+        ),
+        .testTarget(
+            name: "AthenaMLXTests",
+            dependencies: [
+                "AthenaMLX", "AthenaSweep", "AthenaCore",
+                "AthenaBacktest",
+            ]
+        ),
     ]
 )
