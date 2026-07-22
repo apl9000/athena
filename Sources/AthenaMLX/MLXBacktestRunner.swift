@@ -90,6 +90,8 @@ public struct MLXBacktestRunner: BacktestRunner {
         // Real MLX tensor dispatch is gated here; until mlx-swift is added
         // as a conditional dependency this path also delegates to
         // EventDrivenRunner, keeping non-Apple-Silicon builds green.
+        // Both branches are intentionally identical at this slice — the
+        // #if canImport(MLX) block marks exactly where tensor dispatch lands.
         #if canImport(MLX)
         // TODO: Replace with MLX tensor dispatch in the vectorized-fills slice.
         return try await EventDrivenRunner().run(

@@ -10,6 +10,9 @@ import AthenaSweep
 /// two runners. Both paths delegate to `EventDrivenRunner` in the current
 /// slice, so results are bit-identical; the tolerance documents the acceptable
 /// bound for future tensor-dispatch implementations.
+///
+/// NOTE: Once real MLX tensor dispatch is active, accumulated Float16/Float32
+/// rounding will likely require relaxing this constant (suggested: 1e-6).
 private let kSharpeMatchTolerance: Double = 1e-12
 
 // MARK: - Sendable actor flag
@@ -328,6 +331,29 @@ final class MLXFallbackTaxRegimeTests: XCTestCase {
         XCTAssertGreaterThan(
             mlxResult.fills.count, 0,
             "Fixture must produce at least one fill so the count comparison is non-trivial"
+        )
+    }
+
+    /// Sharpe must match when a VectorizableStrategy with USWashSale
+    /// falls back to `EventDrivenRunner`.
+    func test_usWashSaleRegime_sharpeMatchesEventDrivenRunner() async throws {
+        let sym = Symbol("T")
+        let bars = makeLinearBars(120, symbol: sym)
+        let config = makeConfig(bars: bars, taxRegime: USWashSale())
+
+        let mlxResult = try await MLXBacktestRunner().run(
+            strategy: VectorizableBuyFirstBarStrategy(symbol: sym, qty: 10),
+            bars: bars, config: config
+        )
+        let edResult = try await EventDrivenRunner().run(
+            strategy: VectorizableBuyFirstBarStrategy(symbol: sym, qty: 10),
+            bars: bars, config: config
+        )
+
+        XCTAssertEqual(
+            mlxResult.sharpe, edResult.sharpe,
+            accuracy: kSharpeMatchTolerance,
+            "Sharpe must match: USWashSale regime forces fallback to EventDrivenRunner"
         )
     }
 
