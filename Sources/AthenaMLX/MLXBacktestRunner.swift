@@ -8,10 +8,12 @@ import AthenaSweep
 /// strategies on Apple Silicon (macOS / iOS).
 ///
 /// ## Fast-path eligibility
-/// Both conditions must be met for a cell to take the MLX fast path:
+/// All conditions must be met for a cell to take the MLX fast path:
 /// 1. The strategy conforms to ``VectorizableStrategy``.
 /// 2. The ``BacktestConfig`` uses ``NoTaxes`` (tax-regime vectorization
 ///    is out of scope for v0.5).
+/// 3. The ``BacktestConfig`` uses ``NoCorporateActions``.
+/// 4. The bar sequence covers at most one symbol.
 ///
 /// ## Fallback behaviour
 /// When either condition is not met, the runner transparently routes
@@ -19,7 +21,7 @@ import AthenaSweep
 /// handle the dispatch themselves — the result shape is always the
 /// same ``BacktestResult`` regardless of which path ran.
 ///
-/// Two explicit fallback triggers:
+/// Explicit fallback triggers:
 /// - **Non-`VectorizableStrategy`**: any strategy that does not implement
 ///   ``VectorizableStrategy/signals(for:)`` is routed through
 ///   ``EventDrivenRunner`` on a per-cell basis.
@@ -27,11 +29,14 @@ import AthenaSweep
 ///   `taxRegime` is not ``NoTaxes`` (e.g. ``USWashSale``,
 ///   ``CanadianACB``) always falls back to ``EventDrivenRunner``.
 ///
-/// ## v0.5 slice 2 (this file — fallback paths)
-/// Slice 1 established the ``BacktestRunner`` seam. Slice 2 adds the
-/// explicit dispatch decision. The MLX tensor fast path will replace the
-/// `#if canImport(MLX)` placeholder in a later slice once `mlx-swift` is
-/// added as a conditional macOS / iOS dependency.
+/// ## v0.5 fast path
+/// For eligible cells, `MLXBacktestRunner` calls
+/// ``VectorizableStrategy/signals(for:)`` to obtain a per-bar long/flat
+/// signal array, then simulates fills and computes equity purely in Swift
+/// without spinning up the full actor-based backtest infrastructure.  In
+/// a later slice the inner loops will be replaced with MLX tensor
+/// operations behind `#if canImport(MLX)` guards; the observable
+/// `BacktestResult` shape is unchanged.
 ///
 /// ## Usage
 /// ```swift
@@ -49,62 +54,77 @@ public struct MLXBacktestRunner: BacktestRunner {
 
     // MARK: BacktestRunner
 
-    /// Run one backtest cell, routing to the MLX fast path when eligible
-    /// or falling back to ``EventDrivenRunner`` otherwise.
-    ///
-    /// **Dispatch logic:**
-    /// - If `strategy` does not conform to ``VectorizableStrategy`` **or**
-    ///   `config.taxRegime` is not ``NoTaxes``, the call is forwarded to
-    ///   ``EventDrivenRunner`` and the result is returned unchanged.
-    /// - If both conditions are met, the cell is eligible for the MLX
-    ///   tensor fast path. In the current slice that path still delegates
-    ///   to ``EventDrivenRunner``; real tensor dispatch is gated on
-    ///   `#if canImport(MLX)` and lands in a later slice.
-    ///
-    /// Result shape and numeric values are identical across all paths in
-    /// the current slice so that switching runners is a zero-risk change.
+    /// Run one backtest cell, routing to the vectorized fast path when
+    /// eligible or falling back to ``EventDrivenRunner`` otherwise.
+    /// Result shape is identical across both paths.
     public func run(
         strategy: any Strategy,
         bars: [Bar],
         config: BacktestConfig
     ) async throws -> BacktestResult {
-        // Determine fast-path eligibility.
-        // Both conditions must hold; failing either triggers the explicit fallback.
-        let isVectorizable = strategy is any VectorizableStrategy
-        let isNoTaxes = config.taxRegime is NoTaxes
+        // Fast path: VectorizableStrategy + NoTaxes + NoCorporateActions + single symbol.
+        if let vs = strategy as? any VectorizableStrategy,
+           config.taxRegime is NoTaxes,
+           config.corporateActions is NoCorporateActions,
+           Set(bars.map(\.symbol)).count <= 1 {
+            return try vectorizedRun(strategy: vs, bars: bars, config: config)
+        }
+        // Explicit fallback: full event-driven engine (see MLXFallbackTests, #114).
+        return try await EventDrivenRunner().run(
+            strategy: strategy,
+            bars: bars,
+            config: config
+        )
+    }
 
-        guard isVectorizable && isNoTaxes else {
-            // Explicit fallback path:
-            // • Non-VectorizableStrategy: strategy lacks signals(for:).
-            // • Non-NoTaxes regime: tax-regime vectorization is out of v0.5 scope.
-            // Both cases produce results that are numerically identical to a
-            // direct EventDrivenRunner call — the fallback is transparent.
-            return try await EventDrivenRunner().run(
-                strategy: strategy,
-                bars: bars,
-                config: config
+    // MARK: - Vectorized execution
+
+    /// Execute a single backtest cell via the vectorized fill simulator.
+    ///
+    /// Steps:
+    ///  1. Filter and sort bars to the config date window (mirrors BacktestEngine).
+    ///  2. Obtain signals from the strategy's `signals(for:)` method.
+    ///  3. Simulate fills and equity reduction with `VectorizedFillSimulator`.
+    ///  4. Wrap into a `BacktestResult`.
+    private func vectorizedRun(
+        strategy: any VectorizableStrategy,
+        bars: [Bar],
+        config: BacktestConfig
+    ) throws -> BacktestResult {
+        // Filter and sort — same semantics as BacktestEngine.
+        let filteredBars = bars
+            .filter { $0.timestamp >= config.startDate && $0.timestamp <= config.endDate }
+            .sorted { $0.timestamp < $1.timestamp }
+
+        // Determine the primary symbol from the bar sequence.
+        // v0.5 scope: single-symbol strategies.
+        let symbol = filteredBars.first?.symbol ?? Symbol("UNKNOWN")
+
+        // Obtain signals (must match filteredBars.count by VectorizableStrategy contract).
+        let signals = strategy.signals(for: filteredBars)
+
+        // Contract violation: signal count must match bar count.
+        guard signals.count == filteredBars.count else {
+            throw VectorizedFillSimulatorError.signalCountMismatch(
+                signalCount: signals.count, barCount: filteredBars.count
             )
         }
 
-        // Fast path: VectorizableStrategy + NoTaxes.
-        // Real MLX tensor dispatch is gated here; until mlx-swift is added
-        // as a conditional dependency this path also delegates to
-        // EventDrivenRunner, keeping non-Apple-Silicon builds green.
-        // Both branches are intentionally identical at this slice — the
-        // #if canImport(MLX) block marks exactly where tensor dispatch lands.
-        #if canImport(MLX)
-        // TODO: Replace with MLX tensor dispatch in the vectorized-fills slice.
-        return try await EventDrivenRunner().run(
-            strategy: strategy,
-            bars: bars,
-            config: config
+        let sim = VectorizedFillSimulator()
+        let result = sim.simulate(
+            symbol: symbol,
+            signals: signals,
+            bars: filteredBars,
+            initialCash: config.initialCash,
+            commission: config.commission,
+            slippage: config.slippage
         )
-        #else
-        return try await EventDrivenRunner().run(
-            strategy: strategy,
-            bars: bars,
-            config: config
+
+        return BacktestResult(
+            initialEquity: config.initialCash,
+            finalEquity: result.finalEquity,
+            snapshots: result.snapshots,
+            fills: result.fills
         )
-        #endif
     }
 }
