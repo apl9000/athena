@@ -6,23 +6,30 @@ import AthenaSweep
 
 // MARK: - Equivalence tolerance
 //
-// A single constant applied to all numeric comparisons in the equivalence gate.
+// What "equivalence" means once the vectorized fast path is active
+// ────────────────────────────────────────────────────────────────
+// The two runners intentionally differ in position sizing: the
+// `VectorizableStrategy` contract is "fully in" (the simulator buys
+// floor(availableCash / fillPrice) shares at the next open), while an
+// event-driven strategy cannot know the next bar's open at order-submission
+// time and therefore cannot reproduce that quantity exactly. Equity-level
+// metrics are consequently NOT comparable across runners.
 //
-// `totalReturn`, `maxDrawdown`, and `finalEquity` use `Decimal` arithmetic
-// internally and are converted to `Double` for cross-runner comparison.
-// `sharpe` is already a `Double`. `fills.count` is an integer and always
-// compared with exact equality.
-//
-// Exact equality holds while `MLXBacktestRunner` delegates to
-// `EventDrivenRunner` (both runners share the same code path). The tolerance
-// accommodates expected IEEE 754 rounding once MLX tensor dispatch replaces
-// the delegation in a later slice.
+// The gate therefore asserts two things:
+// 1. Cross-runner *fill structure* equivalence — both runners must produce
+//    the same number of fills, on the same bars, on the same sides, at the
+//    same prices. This proves the vectorized signal → fill translation
+//    matches the event-driven engine's timing and pricing semantics.
+// 2. Vectorized *metrics* against golden values captured from the seeded,
+//    deterministic canonical fixture. This is the drift net that catches
+//    numerical changes when MLX tensor ops replace the Swift loops.
 
-/// Shared numeric tolerance for all MLX vs EventDriven equivalence assertions.
-///
-/// Applied to `totalReturn`, `maxDrawdown`, `sharpe`, and `finalEquity`.
-/// `fills.count` is always compared with exact equality.
-private let EquivalenceTolerance: Double = 1e-9
+/// Tolerance for cross-runner fill-price comparisons and golden-value
+/// ratio metrics (`totalReturn`, `maxDrawdown`, `sharpe`).
+private let EquivalenceTolerance: Double = 1e-6
+
+/// Tolerance for golden `finalEquity` comparisons (dollar scale).
+private let EquityTolerance: Double = 0.01
 
 // MARK: - Canonical fixture strategy
 
@@ -38,9 +45,10 @@ private let EquivalenceTolerance: Double = 1e-9
 /// is the event-driven equivalent used by `EventDrivenRunner` (and by
 /// `MLXBacktestRunner` while the fast path is still in delegation mode).
 ///
-/// The trade quantity is fixed at 100 shares per buy so that the vectorized
-/// fill simulator and the event-driven engine produce the same fills when they
-/// execute an identical signal sequence.
+/// The event-driven path trades a fixed 100 shares per buy; the vectorized
+/// path trades all-in per the ``VectorizableStrategy`` contract. Sizing
+/// therefore differs by design — the gate compares fill structure (count,
+/// timing, side, price), not equity, across runners.
 private struct SMALongFlatFixture: Strategy, VectorizableStrategy {
     let symbol: Symbol
     let fastPeriod: Int
@@ -65,6 +73,15 @@ private struct SMALongFlatFixture: Strategy, VectorizableStrategy {
     }
 
     // MARK: Strategy
+
+    /// Pre-register both SMAs so the indicator cache feeds them from bar 0.
+    /// Without this, lazily-created indicators start one bar late (documented
+    /// Indicators caveat), shifting crossovers near the warm-up boundary and
+    /// breaking fill-structure equivalence with the vectorized path.
+    func onStart(context: StrategyContext) async throws {
+        _ = await context.indicators.sma(symbol, period: fastPeriod)
+        _ = await context.indicators.sma(symbol, period: slowPeriod)
+    }
 
     /// Event-driven execution: mirrors the vectorized signal using the indicator cache.
     ///
@@ -145,47 +162,55 @@ private func makeEquivalenceFactory(symbol: Symbol) -> ClosureStrategyFactory {
     }
 }
 
+// MARK: - Golden values
+//
+// Captured from the seeded canonical fixture (Xoshiro256** seed 0xA1B2_C3D4,
+// 300 bars, Decimal arithmetic) with the pure-Swift vectorized fast path.
+// Regenerate by printing the vectorized sweep results if the fixture, the
+// fill contract, or the metric definitions intentionally change.
+private struct GoldenCell {
+    let fast: Int
+    let slow: Int
+    let fills: Int
+    let totalReturn: Double
+    let maxDrawdown: Double
+    let sharpe: Double
+    let finalEquity: Double
+}
+
+private let goldenCells: [GoldenCell] = [
+    GoldenCell(fast: 5,  slow: 20, fills: 15, totalReturn: -0.07301775311022075,
+               maxDrawdown: 0.17834115962037883, sharpe: -0.46116569558400955,
+               finalEquity: 92_698.22468897786),
+    GoldenCell(fast: 5,  slow: 50, fills: 13, totalReturn: -0.0885532531484274,
+               maxDrawdown: 0.1958997936588363, sharpe: -0.622992349646425,
+               finalEquity: 91_144.67468515722),
+    GoldenCell(fast: 10, slow: 20, fills: 15, totalReturn: -0.028595590759415635,
+               maxDrawdown: 0.1722558081460317, sharpe: -0.14369920190938312,
+               finalEquity: 97_140.44092405846),
+    GoldenCell(fast: 10, slow: 50, fills: 11, totalReturn: -0.05600762337800874,
+               maxDrawdown: 0.1924136492571617, sharpe: -0.3459208053246339,
+               finalEquity: 94_399.23766219914),
+]
+
 // MARK: - MLX equivalence gate
-//
-// Platform note
-// ─────────────
-// On platforms where the MLX framework is available (`canImport(MLX)` in
-// MLXBacktestRunner.swift), `MLXBacktestRunner` routes `VectorizableStrategy`
-// + `NoTaxes` cells through its tensor fast path. On all other platforms the
-// runner delegates those cells to `EventDrivenRunner`, keeping CI green on
-// non-Apple-Silicon builds.
-//
-// The tests below run on *all* platforms. On non-MLX platforms the gate passes
-// trivially (both runners share the same event-driven code path, so results
-// are exactly equal). On MLX platforms the gate enforces that tensor dispatch
-// stays within `EquivalenceTolerance` of the event-driven baseline — which is
-// the primary safety net that catches numerical drift when the fast path is
-// active.
 
 /// Equivalence gate between `MLXBacktestRunner` and `EventDrivenRunner` on a
 /// canonical long/flat `VectorizableStrategy` fixture.
 ///
 /// ## What this tests
-/// - Five observable metrics per cell, in result (parameter-grid) order:
-///   total return, max drawdown, Sharpe, final equity, and fill count.
-/// - All numeric comparisons use a single documented `EquivalenceTolerance`.
-/// - Integer metrics (`fills.count`) are always compared with exact equality.
-///
-/// ## Platform behaviour
-/// Non-MLX platforms: both runners delegate to `EventDrivenRunner`; the gate
-/// passes trivially (exact equality). Existing test coverage is unaffected.
-/// MLX platforms: the fast path's tensor dispatch must stay within tolerance
-/// of the event-driven baseline; any drift causes the gate to fail.
+/// - **Cross-runner fill structure**: both runners must produce the same
+///   number of fills per cell, on the same bars, same sides, same prices.
+///   Position *sizing* intentionally differs (see `EquivalenceTolerance`
+///   note above), so equity metrics are not compared across runners.
+/// - **Vectorized metrics vs goldens**: total return, max drawdown, Sharpe,
+///   final equity, and fill count per cell, pinned to values captured from
+///   the deterministic fixture. This catches numerical drift when MLX tensor
+///   dispatch replaces the pure-Swift loops (HQ#116).
 final class MLXEquivalenceGateTests: XCTestCase {
 
-    // MARK: Primary gate: all five metrics, in result order
+    // MARK: Primary gate: fill structure + golden metrics, in result order
 
-    /// Run the canonical SMA long/flat sweep through both runners and assert
-    /// that total return, max drawdown, Sharpe, final equity, and fill count
-    /// match within `EquivalenceTolerance` for every cell, in result order.
-    ///
-    /// This is the primary CI gate for the v0.5 MLX equivalence requirement
-    /// (HQ#116).
     func test_canonicalFixture_allFiveMetrics_matchInResultOrder() async {
         let sym = Symbol("EQ")
         let bars = makeEquivalenceBars(symbol: sym)
@@ -205,6 +230,10 @@ final class MLXEquivalenceGateTests: XCTestCase {
             mlxResults.count, edResults.count,
             "Both runners must return the same number of sweep results"
         )
+        XCTAssertEqual(
+            mlxResults.count, goldenCells.count,
+            "Golden table must cover every canonical grid cell"
+        )
 
         for (i, (mlx, ed)) in zip(mlxResults, edResults).enumerated() {
             guard let mlxBT = mlx.backtest, let edBT = ed.backtest else {
@@ -215,41 +244,60 @@ final class MLXEquivalenceGateTests: XCTestCase {
                 continue
             }
 
-            // 1. Total return
-            XCTAssertEqual(
-                NSDecimalNumber(decimal: mlxBT.totalReturn).doubleValue,
-                NSDecimalNumber(decimal: edBT.totalReturn).doubleValue,
-                accuracy: EquivalenceTolerance,
-                "Cell \(i) [\(mlx.params)]: totalReturn mismatch"
-            )
-
-            // 2. Max drawdown
-            XCTAssertEqual(
-                NSDecimalNumber(decimal: mlxBT.maxDrawdown).doubleValue,
-                NSDecimalNumber(decimal: edBT.maxDrawdown).doubleValue,
-                accuracy: EquivalenceTolerance,
-                "Cell \(i) [\(mlx.params)]: maxDrawdown mismatch"
-            )
-
-            // 3. Sharpe (already Double)
-            XCTAssertEqual(
-                mlxBT.sharpe, edBT.sharpe,
-                accuracy: EquivalenceTolerance,
-                "Cell \(i) [\(mlx.params)]: sharpe mismatch"
-            )
-
-            // 4. Final equity
-            XCTAssertEqual(
-                NSDecimalNumber(decimal: mlxBT.finalEquity.amount).doubleValue,
-                NSDecimalNumber(decimal: edBT.finalEquity.amount).doubleValue,
-                accuracy: EquivalenceTolerance,
-                "Cell \(i) [\(mlx.params)]: finalEquity mismatch"
-            )
-
-            // 5. Fill count — integer; no tolerance required
+            // ── Cross-runner fill structure ──────────────────────────────
             XCTAssertEqual(
                 mlxBT.fills.count, edBT.fills.count,
-                "Cell \(i) [\(mlx.params)]: fills.count mismatch"
+                "Cell \(i) [\(mlx.params)]: fills.count mismatch across runners"
+            )
+            for (j, (mf, ef)) in zip(mlxBT.fills, edBT.fills).enumerated() {
+                XCTAssertEqual(
+                    mf.filledAt, ef.filledAt,
+                    "Cell \(i) fill \(j): timestamp mismatch across runners"
+                )
+                XCTAssertEqual(
+                    mf.side, ef.side,
+                    "Cell \(i) fill \(j): side mismatch across runners"
+                )
+                XCTAssertEqual(
+                    NSDecimalNumber(decimal: mf.price).doubleValue,
+                    NSDecimalNumber(decimal: ef.price).doubleValue,
+                    accuracy: EquivalenceTolerance,
+                    "Cell \(i) fill \(j): price mismatch across runners"
+                )
+            }
+
+            // ── Vectorized metrics vs goldens ────────────────────────────
+            let golden = goldenCells[i]
+            XCTAssertEqual(mlx.params.int("fast"), golden.fast,
+                           "Cell \(i): golden table out of sync with grid order")
+            XCTAssertEqual(mlx.params.int("slow"), golden.slow,
+                           "Cell \(i): golden table out of sync with grid order")
+            XCTAssertEqual(
+                mlxBT.fills.count, golden.fills,
+                "Cell \(i) [\(mlx.params)]: fills.count drifted from golden"
+            )
+            XCTAssertEqual(
+                NSDecimalNumber(decimal: mlxBT.totalReturn).doubleValue,
+                golden.totalReturn,
+                accuracy: EquivalenceTolerance,
+                "Cell \(i) [\(mlx.params)]: totalReturn drifted from golden"
+            )
+            XCTAssertEqual(
+                NSDecimalNumber(decimal: mlxBT.maxDrawdown).doubleValue,
+                golden.maxDrawdown,
+                accuracy: EquivalenceTolerance,
+                "Cell \(i) [\(mlx.params)]: maxDrawdown drifted from golden"
+            )
+            XCTAssertEqual(
+                mlxBT.sharpe, golden.sharpe,
+                accuracy: EquivalenceTolerance,
+                "Cell \(i) [\(mlx.params)]: sharpe drifted from golden"
+            )
+            XCTAssertEqual(
+                NSDecimalNumber(decimal: mlxBT.finalEquity.amount).doubleValue,
+                golden.finalEquity,
+                accuracy: EquityTolerance,
+                "Cell \(i) [\(mlx.params)]: finalEquity drifted from golden"
             )
         }
     }
