@@ -11,10 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 The "MLX vectorized engine release". Adds the `AthenaMLX` module with
 `MLXBacktestRunner` — a `BacktestRunner` that batches every
-`VectorizableStrategy + NoTaxes` cell through a pure-Swift vectorized
-fill simulator instead of spinning up the full actor-based event loop.
-Non-conforming strategies and tax-regime sweeps fall back silently to
-`EventDrivenRunner` per cell. The v0.4 `Sweep` surface is unchanged;
+`VectorizableStrategy + NoTaxes + NoCorporateActions + single-symbol` cell
+through a pure-Swift vectorized fill simulator instead of spinning up the
+full actor-based event loop. Non-qualifying cells (non-`VectorizableStrategy`,
+non-`NoTaxes`, non-`NoCorporateActions`, or multi-symbol) fall back silently
+to `EventDrivenRunner` per cell. The v0.4 `Sweep` surface is unchanged;
 switching to the fast path is one line.
 
 ### Added

@@ -13,18 +13,22 @@ import AthenaMLX
 ///   1. With `EventDrivenRunner` (the v0.4 default)
 ///   2. With `MLXBacktestRunner` (the v0.5 vectorized fast path)
 ///
-/// Results are equivalent for strategies that fall back to `EventDrivenRunner`
-/// (like `MACrossover` below, which does not conform to `VectorizableStrategy`).
+/// Both paths produce numerically equivalent results — `MLXBacktestRunner` and
+/// `EventDrivenRunner` are designed to be identical in outcome for any strategy.
+/// `MACrossover` below does not conform to `VectorizableStrategy`, so it falls
+/// back to `EventDrivenRunner`; equivalence here is doubly guaranteed.
 /// The only code change is the `runner:` argument passed to `Sweep.init`.
 ///
 /// Run with: `swift run MLXSweepExample`
 ///
 /// ## Platform note
 /// `MLXBacktestRunner` is available on all platforms Athena supports.
-/// The current fast path is a pure-Swift vectorized fill simulator;
-/// strategies that conform to `VectorizableStrategy` and use `NoTaxes`
-/// run through it automatically. All others fall back to `EventDrivenRunner`
-/// per cell — no strategy changes needed, no broken builds.
+/// The current fast path is a pure-Swift vectorized fill simulator; it is
+/// designed to produce results numerically equivalent to `EventDrivenRunner`.
+/// Strategies that conform to `VectorizableStrategy`, use `NoTaxes` and
+/// `NoCorporateActions`, and cover a single symbol run through it automatically.
+/// All others fall back to `EventDrivenRunner` per cell — no strategy changes
+/// needed, no broken builds.
 /// MLX GPU tensor dispatch (Apple Silicon) is planned for a future slice.
 
 // MARK: - Helpers
@@ -215,8 +219,9 @@ struct MLXSweepExample {
         Notes
         ─────
         • Switching to MLXBacktestRunner is the only code change (runner: argument).
-        • MACrossover (above) does not conform to VectorizableStrategy, so both
-          runners produce identical results via EventDrivenRunner fallback.
+        • The vectorized and event-driven paths are designed to produce equivalent
+          results. MACrossover does not conform to VectorizableStrategy and falls
+          back to EventDrivenRunner, so equivalence is doubly confirmed here.
         • Strategies that conform to VectorizableStrategy and use NoTaxes take the
           pure-Swift vectorized fast path — no actor overhead, tighter inner loop.
         • Non-qualifying strategies and non-NoTaxes configs always fall back to
