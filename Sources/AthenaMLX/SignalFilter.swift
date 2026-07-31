@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - SignalFilter
 
 /// A post-processor applied to a `VectorizableStrategy`'s boolean signal array
@@ -10,7 +8,7 @@ import Foundation
 ///
 /// ## Invariant
 /// Every implementation must return an array whose `count` equals `signals.count`.
-/// Violating the length contract will cause a runtime trap in `MLXBacktestRunner`.
+/// Violating the length contract will cause a runtime trap via the precondition inside `VectorizedFillSimulator.simulate(...)`.
 public protocol SignalFilter: Sendable {
     /// Apply the filter to a raw signal array.
     ///
@@ -28,9 +26,12 @@ public protocol SignalFilter: Sendable {
 /// bars — debouncing reduces churn and can improve net-of-commission results.
 public struct DebounceFilter: SignalFilter {
     /// The minimum number of bars that must elapse between two consecutive flips.
+    ///
+    /// Must be non-negative. Passing a negative value will trigger a precondition failure.
     public let minBars: Int
 
     public init(minBars: Int) {
+        precondition(minBars >= 0, "minBars must be non-negative")
         self.minBars = minBars
     }
 

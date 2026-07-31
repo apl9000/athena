@@ -1,5 +1,4 @@
 import XCTest
-import AthenaCore
 @testable import AthenaMLX
 
 final class DebounceFilterTests: XCTestCase {
@@ -8,7 +7,7 @@ final class DebounceFilterTests: XCTestCase {
 
     func test_debounceFilter_conformsToSignalFilter() {
         let filter: any SignalFilter = DebounceFilter(minBars: 2)
-        XCTAssertNotNil(filter)  // existential is non-optional; this always passes
+        XCTAssertTrue(filter is DebounceFilter)
     }
 
     // MARK: Empty input
@@ -16,7 +15,6 @@ final class DebounceFilterTests: XCTestCase {
     func test_debounceFilter_emptyInput_returnsEmptyOutput() {
         let filter = DebounceFilter(minBars: 2)
         let result = filter.filter([])
-        XCTAssertNotNil(result)  // [Bool] is non-optional; this always passes
         XCTAssertTrue(result.isEmpty)
     }
 
@@ -26,7 +24,6 @@ final class DebounceFilterTests: XCTestCase {
         let filter = DebounceFilter(minBars: 3)
         let signals = [true, false, true, false, true, false]
         let result = filter.filter(signals)
-        XCTAssertNotNil(result)  // [Bool] is non-optional; this always passes
         XCTAssertEqual(result.count, signals.count)
     }
 
@@ -37,8 +34,8 @@ final class DebounceFilterTests: XCTestCase {
         let filter = DebounceFilter(minBars: 3)
         let signals = [false, true, false, false, false]
         let result = filter.filter(signals)
-        XCTAssertEqual(result, [false, true, true, false, false],
-                       "Second flip at i=2 must be suppressed — within 3-bar debounce window")
+        XCTAssertEqual(result, [false, true, true, true, false],
+                       "Flips at i=2 and i=3 must both be suppressed — within 3-bar debounce window")
     }
 
     func test_debounceFilter_allowsFlipAfterWindow() {
@@ -46,7 +43,6 @@ final class DebounceFilterTests: XCTestCase {
         let filter = DebounceFilter(minBars: 3)
         let signals = [false, true, true, true, false]
         let result = filter.filter(signals)
-        XCTAssertNotNil(result)  // [Bool] is non-optional; this always passes
         XCTAssertEqual(result[4], false,
                        "Flip at i=4 must pass through — gap of 3 meets the minBars threshold")
     }
