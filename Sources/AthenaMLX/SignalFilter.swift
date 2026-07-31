@@ -8,7 +8,9 @@
 ///
 /// ## Invariant
 /// Every implementation must return an array whose `count` equals `signals.count`.
-/// Violating the length contract will cause a runtime trap via the precondition inside `VectorizedFillSimulator.simulate(...)`.
+/// Violating the length contract causes `MLXBacktestRunner` to throw
+/// `VectorizedFillSimulatorError.signalCountMismatch`, and traps the
+/// `precondition` inside `VectorizedFillSimulator.simulate(...)`.
 public protocol SignalFilter: Sendable {
     /// Apply the filter to a raw signal array.
     ///
