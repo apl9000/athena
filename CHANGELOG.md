@@ -9,32 +9,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.0] - TBD
 
-The "MLX runner seam release". Adds the `AthenaMLX` module with
-`MLXBacktestRunner` — a `BacktestRunner` that is the entry point for
-the MLX-backed vectorized fast path on Apple Silicon. In v0.5 slice 1
-the runner delegates to `EventDrivenRunner` internally, so results are
-numerically identical and the seam builds on every platform. The
-`VectorizableStrategy` opt-in protocol is available for strategies that
-can express their signal logic as a single vectorized pass.
+The "MLX vectorized engine release". Adds the `AthenaMLX` module with
+`MLXBacktestRunner` — a `BacktestRunner` that batches every
+`VectorizableStrategy + NoTaxes + NoCorporateActions + single-symbol` cell
+through a pure-Swift vectorized fill simulator instead of spinning up the
+full actor-based event loop. Non-qualifying cells (non-`VectorizableStrategy`,
+non-`NoTaxes`, non-`NoCorporateActions`, or multi-symbol) fall back silently
+to `EventDrivenRunner` per cell. The v0.4 `Sweep` surface is unchanged;
+switching to the fast path is one line.
 
 ### Added
 
 - **AthenaCore**: `VectorizableStrategy` — opt-in protocol for strategies
   that can provide a `signals(for:) -> [Bool]` method. `true` = long
-  (fully in); `false` = flat (fully out). Conforming strategies are
-  eligible for the `MLXBacktestRunner` fast path when `BacktestConfig`
-  also uses `NoTaxes`. The `Strategy` event methods remain fully
-  available; `VectorizableStrategy` only adds `signals(for:)`.
+  (fully in); `false` = flat (fully out). A `false → true` transition
+  triggers a buy at the next bar's open; `true → false` triggers a sell
+  at the next bar's open. A transition on the final bar is not filled.
+  The `Strategy` event methods remain fully available.
 - **AthenaMLX**: New library product. `MLXBacktestRunner` conforming
   to `BacktestRunner` — a drop-in replacement for `EventDrivenRunner`
-  in any `Sweep.init(runner:)` call. Slice 1 delegates internally to
-  `EventDrivenRunner`; later slices add real MLX tensor dispatch for
-  `VectorizableStrategy + NoTaxes` cells on Apple Silicon.
+  in any `Sweep.init(runner:)` call. Routes `VectorizableStrategy +
+  NoTaxes + NoCorporateActions + single-symbol` cells through
+  `VectorizedFillSimulator`; all other cells fall back to
+  `EventDrivenRunner` transparently.
+- **AthenaMLX**: `VectorizedFillSimulator` — internal type that runs the
+  full buy/sell/snapshot loop over a signal array without actor overhead.
+  Supports `CommissionModel` and `SlippageModel` pass-through. Surfaces
+  `VectorizedFillSimulatorError.signalCountMismatch` as a per-cell
+  `SweepError` rather than a crash.
+- **AthenaMLX**: Vectorized indicators — `VectorizedSMA`, `VectorizedEMA`,
+  `VectorizedRSI` (Wilder's smoothed), `VectorizedBollingerBands`. All
+  internal to `AthenaMLX`; exact `Decimal` parity with `AthenaIndicators`
+  (SMA/EMA/RSI) and ≤ 1e-9 parity for BollingerBands (shared
+  `Double`-bridged `sqrt`).
+- **AthenaMLX**: `SignalFilter` protocol + `DebounceFilter` — post-process
+  a strategy's boolean signal array before it reaches the fill simulator.
+  `DebounceFilter(minBars:)` suppresses flips within `minBars` of the
+  previous flip, reducing commission churn.
+- **Tests/AthenaMLXTests**: Full test suite — `MLXBacktestRunnerTests`
+  (conformance, single-cell, result-shape), `VectorizedFillSimulatorTests`
+  (fill timing, quantity, slippage, commission, snapshots),
+  `VectorizedIndicatorParityTests` (SMA/EMA/RSI/BB vs scalar),
+  `MLXFallbackTests` (non-VectorizableStrategy and non-NoTaxes paths),
+  `MLXRunnerValueEquivalenceTests` (cell-level and sweep-level equivalence),
+  `MLXEquivalenceGateTests` (canonical golden-master CI fixture, pinned to
+  `Xoshiro256**` seed `0xA1B2_C3D4`), `SignalFilterTests` (DebounceFilter).
 - **MLXSweepExample**: Worked example demonstrating the one-line runner
   swap. Runs the same MA-crossover grid sweep twice — once with
   `EventDrivenRunner` and once with `MLXBacktestRunner` — printing
-  timing and result tables so users can observe result equivalence on
-  their own hardware.
+  timing and result tables side by side.
 
 ### Design notes
 
@@ -42,25 +65,31 @@ can express their signal logic as a single vectorized pass.
   the `runner:` argument to `Sweep.init`. No strategy changes, no
   conditional compilation, no platform guards in user code.
 - **Transparent fallback.** Cells that are not fast-path eligible
-  (non-`VectorizableStrategy` or non-`NoTaxes`) are silently routed to
-  `EventDrivenRunner` per cell. The caller never needs to detect or
-  handle the dispatch.
-- **Platform gating.** `MLXBacktestRunner` is available on all platforms.
-  The tensor fast path (later slices) requires Apple Silicon. Non-MLX
-  platforms (Intel macOS, Linux) fall back to `EventDrivenRunner` with
-  identical results and no build errors.
+  (non-`VectorizableStrategy`, non-`NoTaxes`, non-`NoCorporateActions`,
+  or multi-symbol) are silently routed to `EventDrivenRunner` per cell.
+  The caller never needs to detect or handle the dispatch.
+- **Platform agnostic.** `MLXBacktestRunner` is available on all platforms
+  (macOS, iOS, Linux). The pure-Swift vectorized path runs everywhere; a
+  future slice will add MLX GPU tensor dispatch behind
+  `#if canImport(MLX)` on Apple Silicon for additional throughput.
 - **Tax-regime sweeps fall back.** `CanadianACB` and `USWashSale` sweeps
   always use `EventDrivenRunner` per cell; the vectorized path is for
   `NoTaxes` only and does not support retroactive reconciliation.
+- **Equivalence gate.** `MLXEquivalenceGateTests` pins vectorized sweep
+  results against golden values from a seeded 300-bar fixture. CI fails
+  if vectorized and event-driven fill structure diverges.
 
 ### Known limitations
 
-- MLX tensor dispatch is not yet implemented (slice 1 delegates).
-  Real vectorized performance requires later v0.5 slices.
+- MLX GPU tensor dispatch is not yet active. The current vectorized path
+  is a tight pure-Swift loop — faster than the actor event-loop for large
+  sweeps, but not Apple-Silicon GPU-accelerated. A future v0.5 slice adds
+  `#if canImport(MLX)` tensor dispatch.
 - Long-only / flat positions only. Short positions, leverage, and sized
   positions are out of v0.5 scope.
 - Vectorized indicator coverage: SMA, EMA, RSI, Bollinger Bands only.
-  MACD and ATR fall back to the event-driven path automatically.
+  Strategies using MACD, ATR, or custom indicators fall back to the
+  event-driven path automatically.
 - Multi-symbol strategies are not fast-path eligible in v0.5.
 - Walk-forward helpers and benchmark harnesses are out of v0.5 scope.
 

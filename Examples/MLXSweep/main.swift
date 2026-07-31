@@ -7,25 +7,29 @@ import AthenaBacktest
 import AthenaSweep
 import AthenaMLX
 
-/// Demonstrates the v0.5 MLX runner seam.
+/// Demonstrates the v0.5 MLX vectorized engine.
 ///
 /// The same MA-crossover parameter sweep is run twice:
 ///   1. With `EventDrivenRunner` (the v0.4 default)
-///   2. With `MLXBacktestRunner` (the v0.5 fast-path entry point)
+///   2. With `MLXBacktestRunner` (the v0.5 vectorized fast path)
 ///
-/// Both paths produce identical results. The only code change is the
-/// `runner:` argument passed to `Sweep.init` — a true one-line swap.
+/// Both paths produce numerically equivalent results — `MLXBacktestRunner` and
+/// `EventDrivenRunner` are designed to be identical in outcome for any strategy.
+/// `MACrossover` below does not conform to `VectorizableStrategy`, so it falls
+/// back to `EventDrivenRunner`; equivalence here is doubly guaranteed.
+/// The only code change is the `runner:` argument passed to `Sweep.init`.
 ///
 /// Run with: `swift run MLXSweepExample`
 ///
 /// ## Platform note
 /// `MLXBacktestRunner` is available on all platforms Athena supports.
-/// In v0.5 slice 1 it delegates internally to `EventDrivenRunner`, so
-/// results are numerically identical and timing differences are minimal.
-/// Later slices will add real MLX tensor dispatch on Apple Silicon;
-/// strategies that conform to `VectorizableStrategy` and use `NoTaxes`
-/// will take that fast path automatically, while all others continue to
-/// fall back to the event-driven path per cell — no strategy changes needed.
+/// The current fast path is a pure-Swift vectorized fill simulator; it is
+/// designed to produce results numerically equivalent to `EventDrivenRunner`.
+/// Strategies that conform to `VectorizableStrategy`, use `NoTaxes` and
+/// `NoCorporateActions`, and cover a single symbol run through it automatically.
+/// All others fall back to `EventDrivenRunner` per cell — no strategy changes
+/// needed, no broken builds.
+/// MLX GPU tensor dispatch (Apple Silicon) is planned for a future slice.
 
 // MARK: - Helpers
 
@@ -215,14 +219,16 @@ struct MLXSweepExample {
         Notes
         ─────
         • Switching to MLXBacktestRunner is the only code change (runner: argument).
-        • In v0.5 slice 1, MLXBacktestRunner delegates to EventDrivenRunner internally,
-          so results are numerically identical and timing is comparable.
-        • Later v0.5 slices add real MLX tensor dispatch on Apple Silicon for
-          strategies that conform to VectorizableStrategy and use NoTaxes.
-          Non-qualifying strategies and non-Apple-Silicon hosts always fall back
-          to EventDrivenRunner — no strategy changes needed, no broken builds.
+        • The vectorized and event-driven paths are designed to produce equivalent
+          results. MACrossover does not conform to VectorizableStrategy and falls
+          back to EventDrivenRunner, so equivalence is doubly confirmed here.
+        • Strategies that conform to VectorizableStrategy and use NoTaxes take the
+          pure-Swift vectorized fast path — no actor overhead, tighter inner loop.
+        • Non-qualifying strategies and non-NoTaxes configs always fall back to
+          EventDrivenRunner per cell — no strategy changes, no broken builds.
         • Tax-regime sweeps (non-NoTaxes) fall back to EventDrivenRunner per cell.
-        • Vectorized indicators in v0.5: SMA, EMA, RSI, Bollinger Bands.
+        • Vectorized indicators in AthenaMLX: SMA, EMA, RSI (Wilder's), Bollinger Bands.
+        • MLX GPU tensor dispatch (Apple Silicon) is planned for a future v0.5 slice.
         """)
     }
 }
