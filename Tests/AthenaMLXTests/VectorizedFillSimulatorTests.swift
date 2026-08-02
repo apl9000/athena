@@ -680,17 +680,17 @@ final class MLXRunnerErrorIsolationTests: XCTestCase {
         }
     }
 
-    // MARK: AC3 — VectorizedFillSimulatorError provides a meaningful localizedDescription
+    // MARK: AC3 — VectorizedFillSimulatorError provides a meaningful errorDescription
 
-    /// The error's `localizedDescription` must include signal count and bar count
+    /// The error's `errorDescription` must include signal count and bar count
     /// so callers can diagnose the problem without inspecting the enum case.
     func test_signalCountMismatch_errorDescription_isInformative() {
         let err = VectorizedFillSimulatorError.signalCountMismatch(signalCount: 7, barCount: 10)
         let desc = err.errorDescription ?? ""
-        XCTAssertTrue(desc.contains("7"),
-                      "errorDescription must mention the actual signal count (7)")
-        XCTAssertTrue(desc.contains("10"),
-                      "errorDescription must mention the expected bar count (10)")
+        XCTAssertTrue(desc.contains("signals.count (7)"),
+                      "errorDescription must mention the actual signal count field (signals.count (7))")
+        XCTAssertTrue(desc.contains("bars.count (10)"),
+                      "errorDescription must mention the expected bar count field (bars.count (10))")
     }
 }
 
