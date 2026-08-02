@@ -574,4 +574,124 @@ final class MLXRunnerDispatchTests: XCTestCase {
     }
 }
 
+// MARK: - MLXBacktestRunner signal-mismatch error isolation tests
+//
+// These tests verify User Story 13: NaN/shape errors from VectorizableStrategy
+// implementations are surfaced as per-cell SweepError — never crashing the sweep.
+
+final class MLXRunnerErrorIsolationTests: XCTestCase {
+
+    // MARK: AC1 — signalCountMismatch throws a typed error
+
+    /// When `signals(for:)` returns fewer elements than `bars.count`,
+    /// `MLXBacktestRunner.run` must throw `VectorizedFillSimulatorError.signalCountMismatch`
+    /// rather than trapping or returning a corrupted result.
+    func test_signalCountMismatch_throwsTypedError() async {
+        let sym = Symbol("T")
+        let bars = makeBars(5, symbol: sym)
+        let config = makeConfig(bars: bars)
+        // Returns 3 signals for 5 bars — a contract violation.
+        let badStrategy = DefinedSignalStrategy(symbol: sym, signalArray: [true, false, true])
+
+        var caughtMismatch = false
+        do {
+            _ = try await MLXBacktestRunner().run(
+                strategy: badStrategy, bars: bars, config: config
+            )
+            XCTFail("Expected VectorizedFillSimulatorError.signalCountMismatch to be thrown")
+        } catch VectorizedFillSimulatorError.signalCountMismatch(let sc, let bc) {
+            caughtMismatch = true
+            XCTAssertEqual(sc, 3, "signalCount in the error must reflect the returned array length")
+            XCTAssertEqual(bc, 5, "barCount in the error must reflect the filtered bar count")
+        } catch {
+            XCTFail("Expected VectorizedFillSimulatorError, got \(error)")
+        }
+        XCTAssertTrue(caughtMismatch, "signalCountMismatch error must have been thrown")
+    }
+
+    /// When `signals(for:)` returns MORE elements than `bars.count`, the same
+    /// typed error must be thrown.
+    func test_signalCountMismatch_tooManySignals_throwsTypedError() async {
+        let sym = Symbol("T")
+        let bars = makeBars(3, symbol: sym)
+        let config = makeConfig(bars: bars)
+        // Returns 5 signals for 3 bars.
+        let badStrategy = DefinedSignalStrategy(
+            symbol: sym,
+            signalArray: [true, false, true, false, true]
+        )
+
+        do {
+            _ = try await MLXBacktestRunner().run(
+                strategy: badStrategy, bars: bars, config: config
+            )
+            XCTFail("Expected VectorizedFillSimulatorError.signalCountMismatch to be thrown")
+        } catch VectorizedFillSimulatorError.signalCountMismatch(let sc, let bc) {
+            XCTAssertEqual(sc, 5, "signalCount must equal the oversized array length")
+            XCTAssertEqual(bc, 3, "barCount must equal the bar array length")
+        } catch {
+            XCTFail("Expected VectorizedFillSimulatorError, got \(error)")
+        }
+    }
+
+    // MARK: AC2 — signalCountMismatch is isolated as a per-cell .failure in a Sweep
+
+    /// A single cell whose VectorizableStrategy returns a wrong-length signal
+    /// array must produce a `.failure` SweepResult — the error must NOT crash
+    /// the sweep or affect adjacent cells.
+    func test_signalCountMismatch_isolatedAsPerCellFailure() async {
+        let sym = Symbol("T")
+        let bars = makeBars(5, symbol: sym)
+        let config = makeConfig(bars: bars)
+        let space = ParameterSpace.grid([.ints("cell", [0, 1, 2])])
+        let sym2 = sym
+
+        // Cell 1 returns a wrong-length signal array; cells 0 and 2 are fine.
+        let factory = ClosureStrategyFactory { params -> any Strategy in
+            if params.int("cell") == 1 {
+                // 2 signals for 5 bars → signalCountMismatch at runtime.
+                return DefinedSignalStrategy(symbol: sym2, signalArray: [true, false])
+            }
+            return DefinedSignalStrategy(symbol: sym2, signalArray: [Bool](repeating: false, count: 5))
+        }
+
+        let results = await Sweep(
+            factory: factory,
+            runner: MLXBacktestRunner(),
+            bars: bars,
+            config: config,
+            space: space
+        ).run()
+
+        XCTAssertEqual(results.count, 3,
+                       "All 3 cells must return a result even when one produces a signal mismatch")
+        // Cell 0 and cell 2 must succeed.
+        if case .success = results[0].outcome {} else {
+            XCTFail("Cell 0 (no mismatch) must succeed")
+        }
+        // Cell 1 must be a per-cell failure — NOT a crash.
+        if case .failure = results[1].outcome {
+            // expected — signal mismatch surfaced as SweepError
+        } else {
+            XCTFail("Cell 1 (signal mismatch) must produce a .failure outcome, not crash the sweep")
+        }
+        if case .success = results[2].outcome {} else {
+            XCTFail("Cell 2 (no mismatch) must succeed")
+        }
+    }
+
+    // MARK: AC3 — VectorizedFillSimulatorError provides a meaningful localizedDescription
+
+    /// The error's `localizedDescription` must include signal count and bar count
+    /// so callers can diagnose the problem without inspecting the enum case.
+    func test_signalCountMismatch_errorDescription_isInformative() {
+        let err = VectorizedFillSimulatorError.signalCountMismatch(signalCount: 7, barCount: 10)
+        let desc = err.errorDescription ?? ""
+        XCTAssertTrue(desc.contains("7"),
+                      "errorDescription must mention the actual signal count (7)")
+        XCTAssertTrue(desc.contains("10"),
+                      "errorDescription must mention the expected bar count (10)")
+    }
+}
+
 // Money already conforms to Hashable (and thus Equatable) in AthenaCore.
