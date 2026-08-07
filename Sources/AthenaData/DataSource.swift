@@ -5,6 +5,21 @@ public protocol DataSource: Sendable {
     func bars(for symbol: Symbol, from: Date, to: Date) async throws -> [Bar]
 }
 
+/// Parse a decimal string pinned to the US-POSIX locale so that values using
+/// '.' as the decimal separator (standard CSV / Yahoo Finance format) are
+/// interpreted correctly on any device locale.
+///
+/// `Decimal(string:)` without a locale uses the system locale's decimal
+/// separator; on locales that use ',' (e.g. de_DE, fr_FR) it returns nil for
+/// every standard OHLC field, turning every data row into a `malformedRow`
+/// error.  Using `NSDecimalNumber(string:locale:)` with a fixed locale is the
+/// canonical workaround on Apple platforms.
+private func parseCSVDecimal(_ string: String) -> Decimal? {
+    let n = NSDecimalNumber(string: string, locale: Locale(identifier: "en_US_POSIX"))
+    guard n != NSDecimalNumber.notANumber else { return nil }
+    return n.decimalValue
+}
+
 public enum DataSourceError: Error, Sendable {
     case fileNotFound(URL)
     case malformedRow(Int)
@@ -56,11 +71,11 @@ public struct CSVDataSource: DataSource {
                 throw DataSourceError.malformedRow(i + 2)  // +2 for header + 1-indexed
             }
             guard
-                let date = formatter.date(from: fields[0]),
-                let open = Decimal(string: fields[1]),
-                let high = Decimal(string: fields[2]),
-                let low = Decimal(string: fields[3]),
-                let close = Decimal(string: fields[4]),
+                let date   = formatter.date(from: fields[0]),
+                let open   = parseCSVDecimal(fields[1]),
+                let high   = parseCSVDecimal(fields[2]),
+                let low    = parseCSVDecimal(fields[3]),
+                let close  = parseCSVDecimal(fields[4]),
                 let volume = Int(fields[5])
             else {
                 throw DataSourceError.malformedRow(i + 2)
@@ -130,7 +145,7 @@ public struct CSVCorporateActionSource: CorporateActionSource {
             guard
                 let rowDate = formatter.date(from: fields[0]),
                 Symbol(fields[1]) == symbol,
-                let value = Decimal(string: fields[3])
+                let value = parseCSVDecimal(fields[3])
             else { continue }
             guard calendar.startOfDay(for: rowDate) == targetDay else { continue }
 

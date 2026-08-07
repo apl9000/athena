@@ -63,6 +63,27 @@ final class BrokersTests: XCTestCase {
         XCTAssertEqual(result.amount, Decimal(string: "9.95"))
     }
 
+    /// Regression test: QuestradeStockCommission must not force-unwrap Decimal(string:)
+    /// literals.  On non-US locales (de_DE, fr_FR, …) Decimal(string: "4.95") returns
+    /// nil and the former implementation would trap at runtime.
+    ///
+    /// This test uses arithmetic-constructed Decimal values for its assertions so that
+    /// the same locale-independence property holds in the test expectations themselves.
+    func testQuestradeCommissionLocaleIndependentConstants() {
+        let c = QuestradeStockCommission()
+        let floor495: Decimal = Decimal(495) / Decimal(100)  // 4.95 — no string parsing
+        let cap995:   Decimal = Decimal(995) / Decimal(100)  // 9.95 — no string parsing
+
+        // Below floor → floor charged
+        XCTAssertEqual(c.commission(for: order(qty: 100), fillPrice: 50).amount, floor495)
+        // Above cap → cap charged
+        XCTAssertEqual(c.commission(for: order(qty: 5000), fillPrice: 50).amount, cap995)
+        // In range → per-share rate (700 × 0.01 = 7.00)
+        XCTAssertEqual(c.commission(for: order(qty: 700), fillPrice: 50).amount, 7)
+        // Currency is always CAD
+        XCTAssertEqual(c.commission(for: order(qty: 100), fillPrice: 50).currency, .cad)
+    }
+
     func testNoSlippageReturnsReference() {
         let p = NoSlippage().fillPrice(referencePrice: 100, order: order(), bar: bar())
         XCTAssertEqual(p, 100)
