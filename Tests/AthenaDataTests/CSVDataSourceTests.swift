@@ -167,7 +167,7 @@ final class CSVDataSourceTests: XCTestCase {
                                           to: Date(timeIntervalSince1970: 9_999_999_999))
         XCTAssertEqual(bars.count, 1)
         // Arithmetic-constructed expected values — no Decimal(string:) locale risk.
-        XCTAssertEqual(bars[0].open,   Decimal(1005)  / Decimal(10))   // 100.50
+        XCTAssertEqual(bars[0].open,   Decimal(10050) / Decimal(100))   // 100.50
         XCTAssertEqual(bars[0].high,   Decimal(10125) / Decimal(100))  // 101.25
         XCTAssertEqual(bars[0].low,    Decimal(9975)  / Decimal(100))  // 99.75
         XCTAssertEqual(bars[0].close,  Decimal(100))                    // 100.00
