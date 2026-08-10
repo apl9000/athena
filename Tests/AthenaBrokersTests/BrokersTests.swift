@@ -26,12 +26,13 @@ final class BrokersTests: XCTestCase {
     }
 
     func testFixedCommission() {
-        let c = FixedCommission(amount: Decimal(string: "4.95")!).commission(for: order(), fillPrice: 100)
-        XCTAssertEqual(c.amount, Decimal(string: "4.95"))
+        let amount495: Decimal = Decimal(495) / Decimal(100)
+        let c = FixedCommission(amount: amount495).commission(for: order(), fillPrice: 100)
+        XCTAssertEqual(c.amount, amount495)
     }
 
     func testPerShareCommissionRaw() {
-        let c = PerShareCommission(perShare: Decimal(string: "0.005")!, minimum: 1, maxPercent: Decimal(string: "0.01")!, currency: .usd)
+        let c = PerShareCommission(perShare: Decimal(5) / Decimal(1000), minimum: 1, maxPercent: Decimal(1) / Decimal(100), currency: .usd)
         let result = c.commission(for: order(qty: 1000), fillPrice: 100)
         XCTAssertEqual(result.amount, 5)
     }
@@ -44,13 +45,13 @@ final class BrokersTests: XCTestCase {
 
     func testPerShareCommissionCap() {
         let c = PerShareCommission()
-        let result = c.commission(for: order(qty: 1000), fillPrice: Decimal(string: "0.10")!)
+        let result = c.commission(for: order(qty: 1000), fillPrice: Decimal(1) / Decimal(10))
         XCTAssertEqual(result.amount, 1)
     }
 
     func testQuestradeCommissionUnderFloor() {
         let result = QuestradeStockCommission().commission(for: order(qty: 100), fillPrice: 50)
-        XCTAssertEqual(result.amount, Decimal(string: "4.95"))
+        XCTAssertEqual(result.amount, Decimal(495) / Decimal(100))
     }
 
     func testQuestradeCommissionInRange() {
@@ -60,7 +61,7 @@ final class BrokersTests: XCTestCase {
 
     func testQuestradeCommissionAtCap() {
         let result = QuestradeStockCommission().commission(for: order(qty: 5000), fillPrice: 50)
-        XCTAssertEqual(result.amount, Decimal(string: "9.95"))
+        XCTAssertEqual(result.amount, Decimal(995) / Decimal(100))
     }
 
     /// Regression test: QuestradeStockCommission must not force-unwrap Decimal(string:)

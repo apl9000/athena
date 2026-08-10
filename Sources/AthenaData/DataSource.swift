@@ -14,8 +14,10 @@ public protocol DataSource: Sendable {
 /// every standard OHLC field, turning every data row into a `malformedRow`
 /// error.  Using `NSDecimalNumber(string:locale:)` with a fixed locale is the
 /// canonical workaround on Apple platforms.
+private let posixLocale: Locale = Locale(identifier: "en_US_POSIX")
+
 private func parseCSVDecimal(_ string: String) -> Decimal? {
-    let n = NSDecimalNumber(string: string, locale: Locale(identifier: "en_US_POSIX"))
+    let n = NSDecimalNumber(string: string, locale: posixLocale)
     guard n != NSDecimalNumber.notANumber else { return nil }
     return n.decimalValue
 }

@@ -26,8 +26,8 @@ final class CSVDataSourceTests: XCTestCase {
                                          from: Date(timeIntervalSince1970: 0),
                                          to: Date(timeIntervalSince1970: 9_999_999_999))
         XCTAssertEqual(bars.count, 3)
-        XCTAssertEqual(bars[0].open, Decimal(string: "100.00"))
-        XCTAssertEqual(bars[2].close, Decimal(string: "102.50"))
+        XCTAssertEqual(bars[0].open, Decimal(100))
+        XCTAssertEqual(bars[2].close, Decimal(1025) / Decimal(10))
         XCTAssertEqual(bars[0].volume, 1_000_000)
         XCTAssertEqual(bars[0].symbol, Symbol("SPY"))
     }
@@ -202,7 +202,7 @@ final class CSVDataSourceTests: XCTestCase {
         let divs = await source.actions(for: Symbol("AAPL"), on: divDay)
         XCTAssertEqual(divs.count, 1)
         if case .cashDividend(let perShare) = divs.first?.action {
-            XCTAssertEqual(perShare.amount, Decimal(string: "0.24"))
+            XCTAssertEqual(perShare.amount, Decimal(24) / Decimal(100))
             XCTAssertEqual(perShare.currency, .usd)
         } else { XCTFail("expected dividend") }
 
