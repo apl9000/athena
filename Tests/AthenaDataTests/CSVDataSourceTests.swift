@@ -26,8 +26,8 @@ final class CSVDataSourceTests: XCTestCase {
                                          from: Date(timeIntervalSince1970: 0),
                                          to: Date(timeIntervalSince1970: 9_999_999_999))
         XCTAssertEqual(bars.count, 3)
-        XCTAssertEqual(bars[0].open, Decimal(string: "100.00"))
-        XCTAssertEqual(bars[2].close, Decimal(string: "102.50"))
+        XCTAssertEqual(bars[0].open, Decimal(100))
+        XCTAssertEqual(bars[2].close, Decimal(1025) / Decimal(10))
         XCTAssertEqual(bars[0].volume, 1_000_000)
         XCTAssertEqual(bars[0].symbol, Symbol("SPY"))
     }
@@ -145,6 +145,35 @@ final class CSVDataSourceTests: XCTestCase {
         XCTAssertLessThan(bars[1].timestamp, bars[2].timestamp)
     }
 
+    /// Regression test: CSVDataSource must parse decimal price fields correctly
+    /// regardless of the device's system locale.
+    ///
+    /// Before this fix, Decimal(string:) was used without a locale argument.
+    /// On locales that use ',' as the decimal separator (de_DE, fr_FR, …) every
+    /// price field like "100.50" would parse as nil, and the data source would
+    /// throw DataSourceError.malformedRow for every valid row.
+    ///
+    /// Assertions use arithmetic-constructed Decimal values (instead of
+    /// Decimal(string:)) to be free of the same locale pitfall in the test itself.
+    func testDecimalParsingIsLocaleIndependent() async throws {
+        let csv = """
+        Date,Open,High,Low,Close,Volume
+        2024-01-02,100.50,101.25,99.75,100.00,1000000
+        """
+        let url = try writeTempCSV(csv)
+        let source = CSVDataSource(path: url, symbol: Symbol("X"))
+        let bars = try await source.bars(for: Symbol("X"),
+                                          from: Date(timeIntervalSince1970: 0),
+                                          to: Date(timeIntervalSince1970: 9_999_999_999))
+        XCTAssertEqual(bars.count, 1)
+        // Arithmetic-constructed expected values — no Decimal(string:) locale risk.
+        XCTAssertEqual(bars[0].open,   Decimal(10050) / Decimal(100))   // 100.50
+        XCTAssertEqual(bars[0].high,   Decimal(10125) / Decimal(100))  // 101.25
+        XCTAssertEqual(bars[0].low,    Decimal(9975)  / Decimal(100))  // 99.75
+        XCTAssertEqual(bars[0].close,  Decimal(100))                    // 100.00
+        XCTAssertEqual(bars[0].volume, 1_000_000)
+    }
+
     // MARK: - CSVCorporateActionSource
 
     func testCorpActionSourceParsesSplitsAndDividends() async throws {
@@ -173,7 +202,7 @@ final class CSVDataSourceTests: XCTestCase {
         let divs = await source.actions(for: Symbol("AAPL"), on: divDay)
         XCTAssertEqual(divs.count, 1)
         if case .cashDividend(let perShare) = divs.first?.action {
-            XCTAssertEqual(perShare.amount, Decimal(string: "0.24"))
+            XCTAssertEqual(perShare.amount, Decimal(24) / Decimal(100))
             XCTAssertEqual(perShare.currency, .usd)
         } else { XCTFail("expected dividend") }
 

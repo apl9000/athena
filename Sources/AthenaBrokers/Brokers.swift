@@ -57,8 +57,14 @@ public struct PerShareCommission: CommissionModel {
 public struct QuestradeStockCommission: CommissionModel {
     public init() {}
     public func commission(for order: Order, fillPrice: Decimal) -> Money {
-        let raw = order.quantity * Decimal(string: "0.01")!
-        let clamped = min(max(raw, Decimal(string: "4.95")!), Decimal(string: "9.95")!)
+        // Use Decimal arithmetic instead of Decimal(string:)! to avoid a locale-dependent
+        // crash.  Decimal(string: "4.95") uses the system locale's decimal separator; on
+        // non-US locales (e.g. de_DE, fr_FR) it returns nil and the force-unwrap traps.
+        let perShare: Decimal = Decimal(1) / Decimal(100)    // 0.01 per share
+        let floorAmt: Decimal = Decimal(495) / Decimal(100)  // 4.95 minimum
+        let capAmt: Decimal   = Decimal(995) / Decimal(100)  // 9.95 maximum
+        let raw     = order.quantity * perShare
+        let clamped = min(max(raw, floorAmt), capAmt)
         return Money(clamped, .cad)
     }
 }

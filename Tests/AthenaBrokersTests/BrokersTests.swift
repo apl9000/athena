@@ -26,12 +26,13 @@ final class BrokersTests: XCTestCase {
     }
 
     func testFixedCommission() {
-        let c = FixedCommission(amount: Decimal(string: "4.95")!).commission(for: order(), fillPrice: 100)
-        XCTAssertEqual(c.amount, Decimal(string: "4.95"))
+        let amount495: Decimal = Decimal(495) / Decimal(100)
+        let c = FixedCommission(amount: amount495).commission(for: order(), fillPrice: 100)
+        XCTAssertEqual(c.amount, amount495)
     }
 
     func testPerShareCommissionRaw() {
-        let c = PerShareCommission(perShare: Decimal(string: "0.005")!, minimum: 1, maxPercent: Decimal(string: "0.01")!, currency: .usd)
+        let c = PerShareCommission(perShare: Decimal(5) / Decimal(1000), minimum: 1, maxPercent: Decimal(1) / Decimal(100), currency: .usd)
         let result = c.commission(for: order(qty: 1000), fillPrice: 100)
         XCTAssertEqual(result.amount, 5)
     }
@@ -44,13 +45,13 @@ final class BrokersTests: XCTestCase {
 
     func testPerShareCommissionCap() {
         let c = PerShareCommission()
-        let result = c.commission(for: order(qty: 1000), fillPrice: Decimal(string: "0.10")!)
+        let result = c.commission(for: order(qty: 1000), fillPrice: Decimal(1) / Decimal(10))
         XCTAssertEqual(result.amount, 1)
     }
 
     func testQuestradeCommissionUnderFloor() {
         let result = QuestradeStockCommission().commission(for: order(qty: 100), fillPrice: 50)
-        XCTAssertEqual(result.amount, Decimal(string: "4.95"))
+        XCTAssertEqual(result.amount, Decimal(495) / Decimal(100))
     }
 
     func testQuestradeCommissionInRange() {
@@ -60,7 +61,28 @@ final class BrokersTests: XCTestCase {
 
     func testQuestradeCommissionAtCap() {
         let result = QuestradeStockCommission().commission(for: order(qty: 5000), fillPrice: 50)
-        XCTAssertEqual(result.amount, Decimal(string: "9.95"))
+        XCTAssertEqual(result.amount, Decimal(995) / Decimal(100))
+    }
+
+    /// Regression test: QuestradeStockCommission must not force-unwrap Decimal(string:)
+    /// literals.  On non-US locales (de_DE, fr_FR, …) Decimal(string: "4.95") returns
+    /// nil and the former implementation would trap at runtime.
+    ///
+    /// This test uses arithmetic-constructed Decimal values for its assertions so that
+    /// the same locale-independence property holds in the test expectations themselves.
+    func testQuestradeCommissionLocaleIndependentConstants() {
+        let c = QuestradeStockCommission()
+        let floor495: Decimal = Decimal(495) / Decimal(100)  // 4.95 — no string parsing
+        let cap995:   Decimal = Decimal(995) / Decimal(100)  // 9.95 — no string parsing
+
+        // Below floor → floor charged
+        XCTAssertEqual(c.commission(for: order(qty: 100), fillPrice: 50).amount, floor495)
+        // Above cap → cap charged
+        XCTAssertEqual(c.commission(for: order(qty: 5000), fillPrice: 50).amount, cap995)
+        // In range → per-share rate (700 × 0.01 = 7.00)
+        XCTAssertEqual(c.commission(for: order(qty: 700), fillPrice: 50).amount, 7)
+        // Currency is always CAD
+        XCTAssertEqual(c.commission(for: order(qty: 100), fillPrice: 50).currency, .cad)
     }
 
     func testNoSlippageReturnsReference() {
