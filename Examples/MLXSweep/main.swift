@@ -29,7 +29,7 @@ import AthenaMLX
 /// `NoCorporateActions`, and cover a single symbol run through it automatically.
 /// All others fall back to `EventDrivenRunner` per cell — no strategy changes
 /// needed, no broken builds.
-/// MLX GPU tensor dispatch (Apple Silicon) is planned for a future slice.
+/// MLX GPU tensor dispatch (Apple Silicon) is planned for a future release.
 
 // MARK: - Helpers
 
@@ -228,7 +228,7 @@ struct MLXSweepExample {
           EventDrivenRunner per cell — no strategy changes, no broken builds.
         • Tax-regime sweeps (non-NoTaxes) fall back to EventDrivenRunner per cell.
         • Vectorized indicators in AthenaMLX: SMA, EMA, RSI (Wilder's), Bollinger Bands.
-        • MLX GPU tensor dispatch (Apple Silicon) is planned for a future v0.5 slice.
+        • MLX GPU tensor dispatch (Apple Silicon) is planned for a future release.
         """)
     }
 }

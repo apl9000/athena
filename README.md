@@ -6,13 +6,13 @@ Athena is an open-source Swift quant library. It works standalone.
 
 ## Status
 
-**v0.5 — MLX vectorized engine.** Adds the `AthenaMLX` module with `MLXBacktestRunner` — a `BacktestRunner` that routes eligible cells through a pure-Swift vectorized fill simulator instead of the actor-based event loop, cutting per-cell overhead for large parameter sweeps. Cells where the strategy conforms to `VectorizableStrategy`, the config uses `NoTaxes` and `NoCorporateActions`, and the bar sequence covers a single symbol take the fast path; all others fall back silently to `EventDrivenRunner` per cell — no strategy changes, no platform guards, no API changes. The `VectorizableStrategy` protocol lets strategies express their signal logic as a single `[Bool]` array; vectorized SMA, EMA, RSI, and Bollinger Bands are included in `AthenaMLX`. A `SignalFilter` protocol (`DebounceFilter` built-in) lets you post-process signals before they reach the fill simulator. Switching from `EventDrivenRunner` to `MLXBacktestRunner` is a one-line change to `Sweep.init`. MLX GPU tensor dispatch (Apple Silicon) is planned for a future v0.5 slice; the current fast path runs on all platforms.
+**v0.5 — MLX vectorized engine.** Adds the `AthenaMLX` module with `MLXBacktestRunner` — a `BacktestRunner` that routes eligible cells through a pure-Swift vectorized fill simulator instead of the actor-based event loop, cutting per-cell overhead for large parameter sweeps. Cells where the strategy conforms to `VectorizableStrategy`, the config uses `NoTaxes` and `NoCorporateActions`, and the bar sequence covers a single symbol take the fast path; all others fall back silently to `EventDrivenRunner` per cell — no strategy changes, no platform guards, no API changes. The `VectorizableStrategy` protocol lets strategies express their signal logic as a single `[Bool]` array; vectorized SMA, EMA, RSI, and Bollinger Bands are included in `AthenaMLX`. A `SignalFilter` protocol (`DebounceFilter` built-in) lets you post-process signals before they reach the fill simulator. Switching from `EventDrivenRunner` to `MLXBacktestRunner` is a one-line change to `Sweep.init`. MLX GPU tensor dispatch (Apple Silicon) is planned for a future release; the current fast path runs on all platforms.
 
-Builds on v0.4 (`AthenaSweep` module with `Sweep`, `ParameterSpace`, `ParameterAxis`, `BacktestRunner`), v0.3 (pluggable `TaxRegime`, `CanadianACB`, `USWashSale`), v0.2 (stop / stop-limit fills, splits, cash dividends), and the v0.1 foundation (event-driven engine, six indicators, simulated broker, CSV data source). CI enforces ≥ 90% line coverage on every push.
+Builds on v0.4 (`AthenaSweep` module with `Sweep`, `ParameterSpace`, `ParameterAxis`, `BacktestRunner`), v0.3 (pluggable `TaxRegime`, `CanadianACB`, `USWashSale`), v0.2 (stop / stop-limit fills, splits, cash dividends), and the v0.1 foundation (event-driven engine, six indicators, simulated broker, CSV data source). CI builds and tests on macOS and Linux, and enforces ≥ 90% line coverage on every push.
 
 ### v0.5 scope and limitations
 
-- `MLXBacktestRunner` is available on all platforms. MLX GPU tensor dispatch (Apple Silicon) is planned for a future slice; the current fast path is pure Swift and runs on Linux/Intel too.
+- `MLXBacktestRunner` is available on all platforms. MLX GPU tensor dispatch (Apple Silicon) is planned for a future release; the current fast path is pure Swift and runs on Linux/Intel too.
 - Fast-path eligibility: strategy must conform to `VectorizableStrategy` AND `BacktestConfig` must use `NoTaxes` and `NoCorporateActions` and be single-symbol. Non-qualifying cells fall back to `EventDrivenRunner` transparently, with no API changes.
 - Vectorized indicators in `AthenaMLX`: SMA, EMA, RSI (Wilder's), Bollinger Bands. Strategies using MACD, ATR, or custom indicators fall back to the event-driven path automatically.
 - Long-only / flat positions only. Short positions, sized positions, and leverage are out of v0.5 scope.
@@ -29,8 +29,8 @@ Planned for v0.6+:
 ## Quick start
 
 ```bash
-git clone https://github.com/rives-cloud/Athena
-cd Athena
+git clone https://github.com/apl9000/athena
+cd athena
 swift build
 swift test
 
@@ -78,7 +78,7 @@ let sweep = Sweep(
 
 **Platform gating.** `MLXBacktestRunner` is available on all platforms (macOS,
 iOS, Linux). The current fast path is pure Swift and runs everywhere. MLX GPU
-tensor dispatch (Apple Silicon) is planned for a future v0.5 slice; non-MLX
+tensor dispatch (Apple Silicon) is planned for a future release; non-MLX
 platforms use the Swift vectorized path with identical results.
 
 **Fallback behaviour.** `MLXBacktestRunner` evaluates these conditions on every

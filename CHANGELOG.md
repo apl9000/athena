@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.5.0] - TBD
+## [0.5.0] - 2026-10-15
 
 The "MLX vectorized engine release". Adds the `AthenaMLX` module with
 `MLXBacktestRunner` — a `BacktestRunner` that batches every
@@ -53,11 +53,26 @@ switching to the fast path is one line.
   `MLXFallbackTests` (non-VectorizableStrategy and non-NoTaxes paths),
   `MLXRunnerValueEquivalenceTests` (cell-level and sweep-level equivalence),
   `MLXEquivalenceGateTests` (canonical golden-master CI fixture, pinned to
-  `Xoshiro256**` seed `0xA1B2_C3D4`), `SignalFilterTests` (DebounceFilter).
+  `Xoshiro256**` seed `0xA1B2_C3D4`), `SignalFilterTests` (DebounceFilter),
+  and signal-mismatch error-isolation tests (too few / too many signals
+  throw a typed `VectorizedFillSimulatorError`, isolated as a per-cell
+  `.failure` in a multi-cell `Sweep`).
 - **MLXSweepExample**: Worked example demonstrating the one-line runner
   swap. Runs the same MA-crossover grid sweep twice — once with
   `EventDrivenRunner` and once with `MLXBacktestRunner` — printing
   timing and result tables side by side.
+- **CI**: Linux build-and-test job (`swift:5.10` container) alongside the
+  macOS build, test, and coverage gate.
+
+### Fixed
+
+- **AthenaBrokers**: `QuestradeStockCommission` no longer traps on
+  locales that use `,` as the decimal separator (e.g. `de_DE`, `fr_FR`).
+  Its constants are now built from exact integer `Decimal` arithmetic
+  instead of force-unwrapped `Decimal(string:)`.
+- **AthenaData**: `CSVDataSource` and `CSVCorporateActionSource` parse
+  price and value fields with a cached `en_US_POSIX` locale, so valid
+  rows are no longer rejected as `malformedRow` on non-US locales.
 
 ### Design notes
 
@@ -70,7 +85,7 @@ switching to the fast path is one line.
   The caller never needs to detect or handle the dispatch.
 - **Platform agnostic.** `MLXBacktestRunner` is available on all platforms
   (macOS, iOS, Linux). The pure-Swift vectorized path runs everywhere; a
-  future slice will add MLX GPU tensor dispatch behind
+  future release will add MLX GPU tensor dispatch behind
   `#if canImport(MLX)` on Apple Silicon for additional throughput.
 - **Tax-regime sweeps fall back.** `CanadianACB` and `USWashSale` sweeps
   always use `EventDrivenRunner` per cell; the vectorized path is for
@@ -83,7 +98,7 @@ switching to the fast path is one line.
 
 - MLX GPU tensor dispatch is not yet active. The current vectorized path
   is a tight pure-Swift loop — faster than the actor event-loop for large
-  sweeps, but not Apple-Silicon GPU-accelerated. A future v0.5 slice adds
+  sweeps, but not Apple-Silicon GPU-accelerated. A future release adds
   `#if canImport(MLX)` tensor dispatch.
 - Long-only / flat positions only. Short positions, leverage, and sized
   positions are out of v0.5 scope.
@@ -93,7 +108,7 @@ switching to the fast path is one line.
 - Multi-symbol strategies are not fast-path eligible in v0.5.
 - Walk-forward helpers and benchmark harnesses are out of v0.5 scope.
 
-## [0.4.0] - TBD
+## [0.4.0] - 2026-05-03
 
 The "parameter sweep release". Adds `AthenaSweep` — parallel parameter
 sweeps over a grid or random sample of strategy configurations.
@@ -127,7 +142,7 @@ sweeps over a grid or random sample of strategy configurations.
 - **Failure-isolated.** Per-cell errors land in `SweepResult.Outcome.failure`
   without aborting the rest of the sweep.
 
-## [0.3.0] - TBD
+## [0.3.0] - 2026-04-29
 
 The "Tax Realism Release". Adds pluggable tax accounting via a
 `TaxRegime` protocol with two implementations: **Canadian ACB with the
@@ -192,7 +207,7 @@ default and behave identically.
 - Single-portfolio model — spousal-account ACB pooling out of scope.
 - Stock dividends, DRIP, and return-of-capital still deferred.
 
-## [0.2.0] - TBD
+## [0.2.0] - 2026-04-28
 
 The "Correctness Release". Closes two known v0.1 limitations: stop/stop-limit
 order fills and corporate actions (splits + cash dividends). Additive,
@@ -238,7 +253,7 @@ non-breaking — existing v0.1 strategies continue to work unchanged.
 - macOS only in CI; Linux support is best-effort.
 - Real market data is not committed; users provide their own.
 
-## [0.1.0] - TBD
+## [0.1.0] - 2026-04-27
 
 Initial public release.
 
@@ -281,6 +296,9 @@ Initial public release.
 - macOS only in CI; Linux support is best-effort.
 - Real market data (`data/SPY.csv`) is not committed; users provide their own.
 
-[Unreleased]: https://github.com/rives-cloud/Athena/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/rives-cloud/Athena/releases/tag/v0.2.0
-[0.1.0]: https://github.com/rives-cloud/Athena/releases/tag/v0.1.0
+[Unreleased]: https://github.com/apl9000/athena/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/apl9000/athena/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/apl9000/athena/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/apl9000/athena/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/apl9000/athena/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/apl9000/athena/releases/tag/v0.1.0
